@@ -43,17 +43,17 @@ func (t *Trigger) Ready() <-chan struct{} {
 // Handoff is a singly-buffered level-triggered rendezvous channel. A waiter
 // blocks on the Ready channel until a value is provided by Send. A value
 // handed off persists until consumed.
-type Handoff struct {
-	ch chan interface{}
+type Handoff[T any] struct {
+	ch chan T
 }
 
 // NewHandoff constructs a new empty handoff.
-func NewHandoff() Handoff { return Handoff{ch: make(chan interface{}, 1)} }
+func NewHandoff[T any]() *Handoff[T] { return &Handoff[T]{ch: make(chan T, 1)} }
 
 // Send provides a value to handoff.  Send does not block.  Once v is sent to
 // h, subsequent calls to Send will be discarded until a receiver accepts the
 // handoff of v.
-func (h *Handoff) Send(v interface{}) {
+func (h *Handoff[T]) Send(v T) {
 	select {
 	case h.ch <- v:
 	default:
@@ -61,4 +61,4 @@ func (h *Handoff) Send(v interface{}) {
 }
 
 // Ready returns a channel that delivers a value when a handoff is available.
-func (h *Handoff) Ready() <-chan interface{} { return h.ch }
+func (h *Handoff[T]) Ready() <-chan T { return h.ch }

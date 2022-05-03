@@ -43,7 +43,7 @@ func TestTrigger(t *testing.T) {
 }
 
 func TestHandoff(t *testing.T) {
-	h := msync.NewHandoff()
+	h := msync.NewHandoff[int]()
 
 	// Multiple sends to h do not block.
 	h.Send(1)
@@ -71,14 +71,13 @@ func TestHandoff(t *testing.T) {
 	}
 
 	// Play ping-ping.
-	p := msync.NewHandoff()
+	p := msync.NewHandoff[any]()
 	done := make(chan struct{})
 	var sum int
 	go func() {
 		defer close(done)
 		for i := 0; i < 3; i++ {
-			v := <-h.Ready()
-			sum += v.(int)
+			sum += <-h.Ready()
 			p.Send(nil)
 		}
 	}()

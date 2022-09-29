@@ -50,13 +50,14 @@ type Handoff[T any] struct {
 // NewHandoff constructs a new empty handoff.
 func NewHandoff[T any]() *Handoff[T] { return &Handoff[T]{ch: make(chan T, 1)} }
 
-// Send provides a value to handoff.  Send does not block.  Once v is sent to
-// h, subsequent calls to Send will be discarded until a receiver accepts the
-// handoff of v.
-func (h *Handoff[T]) Send(v T) {
+// Send hands off or discards v, and reports whether v was handed off (true) or
+// discarded (false). Send does not block.
+func (h *Handoff[T]) Send(v T) bool {
 	select {
 	case h.ch <- v:
+		return true
 	default:
+		return false
 	}
 }
 

@@ -45,10 +45,16 @@ func TestTrigger(t *testing.T) {
 func TestHandoff(t *testing.T) {
 	h := msync.NewHandoff[int]()
 
+	mustSend := func(v int, want bool) {
+		if got := h.Send(v); got != want {
+			t.Errorf("Send(%v): got %v, want %v", v, got, want)
+		}
+	}
+
 	// Multiple sends to h do not block.
-	h.Send(1)
-	h.Send(2)
-	h.Send(3)
+	mustSend(1, true)
+	mustSend(2, false)
+	mustSend(3, false)
 
 	// The first value handed off is ready.
 	if got := <-h.Ready(); got != 1 {
@@ -65,7 +71,7 @@ func TestHandoff(t *testing.T) {
 	}
 
 	// The next value sent is the next received.
-	h.Send(4)
+	mustSend(4, true)
 	if got := <-h.Ready(); got != 4 {
 		t.Errorf("Ready: got %v, want 4", got)
 	}
@@ -82,11 +88,11 @@ func TestHandoff(t *testing.T) {
 		}
 	}()
 
-	h.Send(1)
+	mustSend(1, true)
 	<-p.Ready()
-	h.Send(3)
+	mustSend(3, true)
 	<-p.Ready()
-	h.Send(5)
+	mustSend(5, true)
 	<-p.Ready()
 	<-done
 

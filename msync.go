@@ -3,9 +3,10 @@ package msync
 
 import "sync"
 
-// Trigger is an edge-triggered condition. It is analogous in effect to the
-// standard sync.Cond type, but uses a channel for signaling so that the
-// waiters can select on its completion.
+// Trigger is an edge-triggered condition shared by multiple waiting
+// goroutines.  It is analogous in effect to the standard condition variable
+// (sync.Cond) type, but uses a channel for signaling so that the waiters can
+// select on its completion.
 //
 // A zero value is ready for use but must not be copied after first use.
 type Trigger struct {
@@ -40,9 +41,10 @@ func (t *Trigger) Ready() <-chan struct{} {
 	return t.ch
 }
 
-// Handoff is a singly-buffered level-triggered rendezvous channel. A waiter
-// blocks on the Ready channel until a value is provided by Send. A value
-// handed off persists until consumed.
+// Handoff is a singly-buffered level-triggered producer-consumer handoff.
+// A consumer blocks on the Ready channel until a producer calls Send.  Calls
+// to Send do not block; once a value has been sent to the handoff, subsequent
+// values are discarded until the first one was consumed.
 type Handoff[T any] struct {
 	ch chan T
 }
@@ -50,8 +52,8 @@ type Handoff[T any] struct {
 // NewHandoff constructs a new empty handoff.
 func NewHandoff[T any]() *Handoff[T] { return &Handoff[T]{ch: make(chan T, 1)} }
 
-// Send hands off or discards v, and reports whether v was handed off (true) or
-// discarded (false). Send does not block.
+// Send hands off or discards v, and reports whether v was successfully
+// delivered for handoff (true) discarded (false). Send does not block.
 func (h *Handoff[T]) Send(v T) bool {
 	select {
 	case h.ch <- v:

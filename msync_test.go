@@ -108,6 +108,18 @@ func TestHandoff(t *testing.T) {
 	}
 }
 
+func TestValue_Zero(t *testing.T) {
+	var v msync.Value[int]
+
+	if got, want := v.Get(), 0; got != want {
+		t.Errorf("Get from zero Value: got %d, want %d", got, want)
+	}
+	v.Set(25)
+	if got, want := v.Get(), 25; got != want {
+		t.Errorf("Get: got %d, want %d", got, want)
+	}
+}
+
 func TestValue(t *testing.T) {
 	defer leaktest.Check(t)()
 

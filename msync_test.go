@@ -1,14 +1,19 @@
 package msync_test
 
 import (
+	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/creachadair/msync"
+	"github.com/fortytw2/leaktest"
 )
 
 func TestTrigger(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	// Start up a bunch of tasks that listen to a trigger, signal the trigger,
 	// and verify that it woke them all up.
 	tr := msync.NewTrigger()
@@ -43,6 +48,8 @@ func TestTrigger(t *testing.T) {
 }
 
 func TestHandoff(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	h := msync.NewHandoff[int]()
 
 	mustSend := func(v int, want bool) {
@@ -99,4 +106,86 @@ func TestHandoff(t *testing.T) {
 	if sum != 9 {
 		t.Errorf("Checksum: got %v, want 9", sum)
 	}
+}
+
+func TestValue(t *testing.T) {
+	defer leaktest.Check(t)()
+
+	v := msync.NewValue("apple")
+	var wg sync.WaitGroup
+
+	mustGet := func(want string) {
+		if got := v.Get(); got != want {
+			t.Errorf("Get: got %q, want %q", got, want)
+		}
+	}
+	setAfter := func(d time.Duration, s string) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			time.Sleep(d)
+			v.Set(s)
+		}()
+	}
+	mustWait := func(ctx context.Context, wantV string, wantF bool) {
+		got, ok := v.Wait(ctx)
+		if got != wantV {
+			t.Errorf("Wait value: got %q, want %q", got, wantV)
+		}
+		if ok != wantF {
+			t.Errorf("Wait flag: got %v, want %v", ok, wantF)
+		}
+	}
+
+	ctx := context.Background()
+
+	// Verify the initial value.
+	mustGet("apple")
+
+	// Verify that we can Get the expected value from a Set.
+	v.Set("pear")
+	mustGet("pear")
+
+	// Verify that a waiter wakes for a set.
+	setAfter(5*time.Millisecond, "plum")
+	mustWait(ctx, "plum", true)
+	mustGet("plum")
+
+	// Verify that a waiter times out if no Set occurs.
+	t.Run("Timeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		defer cancel()
+		mustWait(ctx, "plum", false)
+	})
+
+	// Verify that Wait gets the value of a concurrent Set.
+	t.Run("Concur", func(t *testing.T) {
+		setAfter(2*time.Millisecond, "cherry")
+		setAfter(2*time.Millisecond, "raspberry")
+
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		defer cancel()
+
+		got, ok := v.Wait(ctx)
+		checkOneOf(t, "Wait value", got, "raspberry", "cherry")
+		if !ok {
+			t.Error("Wait: got false flag, wanted true")
+		}
+	})
+
+	// Clean up goroutines for the leak checker.
+	wg.Wait()
+
+	// Make sure the value settled to one of the ones we set.
+	checkOneOf(t, "Get value", v.Get(), "raspberry", "cherry")
+}
+
+func checkOneOf(t *testing.T, pfx, got string, want ...string) {
+	t.Helper()
+	for _, w := range want {
+		if got == w {
+			return
+		}
+	}
+	t.Errorf("%s: got %q, want one of {%+v}", pfx, got, strings.Join(want, ", "))
 }

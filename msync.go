@@ -83,9 +83,9 @@ func (h *Handoff[T]) Send(v T) bool {
 // Ready returns a channel that delivers a value when a handoff is available.
 func (h *Handoff[T]) Ready() <-chan T { return h.ch }
 
-// Value holds a single value of type T that can be concurrently accessed by
-// multiple goroutines. A zero Value is ready for use, but must not be copied
-// after its first use.
+// A Value is a mutable container for a single value of type T that can be
+// concurrently accessed by multiple goroutines. A zero Value is ready for use,
+// but must not be copied after its first use.
 type Value[T any] struct {
 	x     T
 	mu    sync.Mutex
@@ -119,8 +119,10 @@ func (v *Value[T]) Get() T {
 //
 // If v.Set is not called before ctx ends, Wait returns the value v held when
 // Wait was called. Otherwise, Wait returns the value from one of the v.Set
-// calls made during its execution. If multiple goroutines set v concurrently,
-// Wait will return the value from one of them, but not necessarily the first.
+// calls made during its execution.
+//
+// If multiple goroutines set v concurrently with a call to Wait, the Wait call
+// will return the value from one of them, but not necessarily the first.
 func (v *Value[T]) Wait(ctx context.Context) (T, bool) {
 	v.mu.Lock()
 	if v.ready == nil {

@@ -133,11 +133,10 @@ func TestValue(t *testing.T) {
 	}
 	setAfter := func(d time.Duration, s string) {
 		wg.Add(1)
-		go func() {
+		time.AfterFunc(d, func() {
 			defer wg.Done()
-			time.Sleep(d)
 			v.Set(s)
-		}()
+		})
 	}
 	mustWait := func(ctx context.Context, wantV string, wantF bool) {
 		got, ok := v.Wait(ctx)

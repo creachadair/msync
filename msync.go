@@ -114,7 +114,7 @@ func (v *Value[T]) Get() T {
 }
 
 // Wait blocks until v.Set is called, or until ctx ends, and returns the
-// current value in v. The flag indicating whether Set was called (true) or ctx
+// current value in v. The flag indicates whether Set was called (true) or ctx
 // timed out (false).
 //
 // If v.Set is not called before ctx ends, Wait returns the value v held when

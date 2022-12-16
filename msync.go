@@ -95,7 +95,8 @@ type Value[T any] struct {
 // NewValue creates a new Value with the given initial value.
 func NewValue[T any](init T) *Value[T] { return &Value[T]{x: init} }
 
-// Set updates the value stored in v to newValue.
+// Set updates the value stored in v to newValue. Calling Set also wakes any
+// goroutines that are blocked in the Wait method.
 func (v *Value[T]) Set(newValue T) {
 	v.mu.Lock()
 	defer v.mu.Unlock()

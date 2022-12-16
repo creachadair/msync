@@ -7,8 +7,8 @@ import (
 )
 
 // Trigger is an edge-triggered condition shared by multiple goroutines.  It is
-// analogous to the standard condition variable (sync.Cond) but uses a channel
-// for signaling.
+// analogous in effect to the standard condition variable (sync.Cond) but uses
+// a channel for signaling.
 //
 // To wait on the trigger, call Ready to obtain a channel. This channel will be
 // closed the next time the Signal method is executed. A fresh channel is

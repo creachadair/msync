@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      time: "08:45"
+      timezone: "America/Los_Angeles"
+    reviewers:
+      - creachadair

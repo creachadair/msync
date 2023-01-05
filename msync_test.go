@@ -2,6 +2,8 @@ package msync_test
 
 import (
 	"context"
+	"errors"
+	"math/rand"
 	"strings"
 	"sync"
 	"testing"
@@ -199,4 +201,74 @@ func checkOneOf(t *testing.T, pfx, got string, want ...string) {
 		}
 	}
 	t.Errorf("%s: got %q, want one of {%+v}", pfx, got, strings.Join(want, ", "))
+}
+
+func TestCollector(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		defer leaktest.Check(t)()
+
+		const numWriters = 5
+		const numValues = 100
+
+		c := msync.NewCollector[int](0)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var nr int
+			for range c.Recv() {
+				nr++
+				if nr >= numValues {
+					if err := c.Close(); err != nil {
+						t.Errorf("Close: got %v, want nil", err)
+					}
+					return
+				}
+			}
+		}()
+
+		ctx := context.Background()
+		for i := 0; i < numWriters; i++ {
+			w := i + 1
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				// Each writer will keep sending until c closes.
+				for {
+					if err := c.Send(ctx, rand.Intn(500)-250); err != nil {
+						if !errors.Is(err, msync.ErrClosed) {
+							t.Errorf("Writer %d: got error %v, want %v", w, err, msync.ErrClosed)
+						}
+						return
+					}
+				}
+			}()
+		}
+
+		wg.Wait()
+	})
+
+	t.Run("Cancel", func(t *testing.T) {
+		c := msync.NewCollector[bool](0)
+		defer c.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+
+		if err := c.Send(ctx, true); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Send: got %v, want %v", err, context.DeadlineExceeded)
+		}
+	})
+
+	t.Run("MultiClose", func(t *testing.T) {
+		c := msync.NewCollector[any](0)
+		if err := c.Close(); err != nil {
+			t.Errorf("Close 1: got %v, want nil", err)
+		}
+
+		if err := c.Close(); !errors.Is(err, msync.ErrClosed) {
+			t.Errorf("Close 2: got %v, want %v", err, msync.ErrClosed)
+		}
+	})
 }

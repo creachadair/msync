@@ -173,11 +173,11 @@ func TestValue(t *testing.T) {
 
 	// Verify that Wait gets the value of a concurrent Set.
 	t.Run("Concur", func(t *testing.T) {
-		setAfter(2*time.Millisecond, "cherry")
-		setAfter(2*time.Millisecond, "raspberry")
-
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Millisecond)
 		defer cancel()
+
+		setAfter(2000*time.Microsecond, "cherry")
+		setAfter(1500*time.Microsecond, "raspberry")
 
 		got, ok := v.Wait(ctx)
 		checkOneOf(t, "Wait value", got, "raspberry", "cherry")

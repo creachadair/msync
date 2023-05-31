@@ -54,14 +54,12 @@ func (v *Value[T]) Wait(ctx context.Context) (T, bool) {
 	}
 	old, ready := v.x, v.ready
 	v.mu.Unlock()
-	for {
-		select {
-		case <-ctx.Done():
-			return old, false
-		case <-ready:
-			v.mu.Lock()
-			defer v.mu.Unlock()
-			return v.x, true
-		}
+	select {
+	case <-ctx.Done():
+		return old, false
+	case <-ready:
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		return v.x, true
 	}
 }

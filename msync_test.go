@@ -49,59 +49,59 @@ func TestTrigger(t *testing.T) {
 	}
 }
 
-func TestHandoff(t *testing.T) {
+func TestFlag(t *testing.T) {
 	defer leaktest.Check(t)()
 
-	h := msync.NewHandoff[int]()
+	f := msync.NewFlag[int]()
 
-	mustSend := func(v int, want bool) {
-		if got := h.Send(v); got != want {
+	mustSet := func(v int, want bool) {
+		if got := f.Set(v); got != want {
 			t.Errorf("Send(%v): got %v, want %v", v, got, want)
 		}
 	}
 
 	// Multiple sends to h do not block.
-	mustSend(1, true)
-	mustSend(2, false)
-	mustSend(3, false)
+	mustSet(1, true)
+	mustSet(2, false)
+	mustSet(3, false)
 
-	// The first value handed off is ready.
-	if got := <-h.Ready(); got != 1 {
+	// The first value set is ready.
+	if got := <-f.Ready(); got != 1 {
 		t.Errorf("Ready: got %v, want 1", got)
 	}
 
-	// Now that the value has been handed off, nothing is available till we send
-	// another value.
+	// Now that the value has been set, nothing is available till we set another
+	// value.
 	select {
 	case <-time.After(100 * time.Millisecond):
 		// OK, nothing here
-	case bad := <-h.Ready():
+	case bad := <-f.Ready():
 		t.Errorf("Ready: unexpected value: %v", bad)
 	}
 
 	// The next value sent is the next received.
-	mustSend(4, true)
-	if got := <-h.Ready(); got != 4 {
+	mustSet(4, true)
+	if got := <-f.Ready(); got != 4 {
 		t.Errorf("Ready: got %v, want 4", got)
 	}
 
 	// Play ping-ping.
-	p := msync.NewHandoff[any]()
+	p := msync.NewFlag[any]()
 	done := make(chan struct{})
 	var sum int
 	go func() {
 		defer close(done)
 		for i := 0; i < 3; i++ {
-			sum += <-h.Ready()
-			p.Send(nil)
+			sum += <-f.Ready()
+			p.Set(nil)
 		}
 	}()
 
-	mustSend(1, true)
+	mustSet(1, true)
 	<-p.Ready()
-	mustSend(3, true)
+	mustSet(3, true)
 	<-p.Ready()
-	mustSend(5, true)
+	mustSet(5, true)
 	<-p.Ready()
 	<-done
 

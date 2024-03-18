@@ -193,6 +193,121 @@ func TestValue(t *testing.T) {
 	checkOneOf(t, "Get value", v.Get(), "raspberry", "cherry")
 }
 
+func TestValue_llsc(t *testing.T) {
+	checkValue := func(t *testing.T, get func() int, want int) {
+		t.Helper()
+		if got := get(); got != want {
+			t.Errorf("Value is %d, want %d", got, want)
+		}
+	}
+	v := msync.NewValue(1)
+	checkValue(t, v.Get, 1)
+
+	t.Run("Success", func(t *testing.T) {
+		s := v.LoadLink()
+		checkValue(t, s.Get, 1)
+
+		s.Set(10)
+		checkValue(t, v.Get, 1)
+		checkValue(t, s.Get, 10)
+
+		if !s.Validate() {
+			t.Error("Validate reported false")
+		}
+
+		checkValue(t, v.Get, 1)
+
+		if !s.StoreCond() {
+			t.Error("StoreCond reported false")
+		}
+		if s.StoreCond() {
+			t.Errorf("Second StoreCond reported true")
+		}
+		checkValue(t, v.Get, 10)
+		checkValue(t, s.Get, 10)
+	})
+
+	t.Run("Fail/Set", func(t *testing.T) {
+		s := v.LoadLink()
+		checkValue(t, s.Get, 10)
+
+		if !s.Validate() {
+			t.Error("Validate reported false")
+		}
+
+		v.Set(20)
+		checkValue(t, v.Get, 20)
+
+		if s.StoreCond() {
+			t.Error("StoreCond reported true")
+		}
+		checkValue(t, v.Get, 20)
+	})
+
+	t.Run("Fail/SetSame", func(t *testing.T) {
+		s := v.LoadLink()
+		checkValue(t, s.Get, 20)
+		s.Set(25)
+
+		// Even a set back to the same value invalidates s.
+		v.Set(20)
+
+		if s.StoreCond() {
+			t.Error("StoreCond reported true")
+		}
+		checkValue(t, v.Get, 20)
+		checkValue(t, s.Get, 25)
+	})
+
+	t.Run("Fail/StoreCond", func(t *testing.T) {
+		s1 := v.LoadLink()
+		s1.Set(30)
+
+		s2 := v.LoadLink()
+		s2.Set(40)
+
+		checkValue(t, v.Get, 20)
+
+		if !s1.StoreCond() {
+			t.Error("StoreCond(1) reported false")
+		}
+		checkValue(t, v.Get, 30)
+
+		if s2.StoreCond() {
+			t.Error("StoreCond(2) reported true")
+		}
+		checkValue(t, v.Get, 30)
+	})
+
+	t.Run("StoreCondWait", func(t *testing.T) {
+		s := v.LoadLink()
+
+		// Verify that a successful StoreCond triggers waiters.
+		ready := make(chan struct{})
+		done := make(chan int, 1)
+		go func() {
+			defer close(done)
+			close(ready)
+			z, _ := v.Wait(context.Background())
+			done <- z
+		}()
+
+		s.Set(50)
+		<-ready
+		if !s.StoreCond() {
+			t.Error("StoreCond reported false")
+		}
+		select {
+		case got := <-done:
+			if got != s.Get() {
+				t.Errorf("Wait got %d, want %d", got, s.Get())
+			}
+		case <-time.After(10 * time.Second):
+			t.Error("Timed out waiting for Wait to return")
+		}
+	})
+}
+
 func checkOneOf(t *testing.T, pfx, got string, want ...string) {
 	t.Helper()
 	for _, w := range want {

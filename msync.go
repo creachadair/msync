@@ -9,6 +9,10 @@ import (
 // A Value is a mutable container for a single value of type T that can be
 // concurrently accessed by multiple goroutines. A zero Value is ready for use,
 // but must not be copied after its first use.
+//
+// The Value takes ownership of the value in its custody. In particular, if a
+// pointer or a slice is stored in a Value, the caller must not modify the
+// contents without separate synchronization.
 type Value[T any] struct {
 	mu    sync.Mutex
 	x     T

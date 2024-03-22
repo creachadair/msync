@@ -114,8 +114,9 @@ func (lv *Linked[T]) StoreCond(v T) bool {
 }
 
 // Validate reports whether a call to StoreCond would have succeeded given the
-// current state of lv. When Validate reports true, lv is valid; otherwise lv
-// is invalid.
+// current state of lv. When Validate reports true, it means lv was valid at
+// the time of the call; it may have become invalid by the time the caller
+// receives the result. If Validate reports false, lv is forever invalid.
 func (lv *Linked[T]) Validate() bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

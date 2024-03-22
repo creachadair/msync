@@ -54,7 +54,8 @@ func (c *Collector[T]) Send(ctx context.Context, v T) error {
 }
 
 // Close closes the collector, which closes the receiver and causes any pending
-// sends to fail. If c is already closed, Close returns ErrClosed.
+// sends to fail. If c is already closed, Close returns ErrClosed.  Close can
+// be called repeatedly, but from at most one goroutine at a time.
 func (c *Collector[T]) Close() error {
 	select {
 	case <-c.done:

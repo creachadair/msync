@@ -207,24 +207,21 @@ func TestValue_llsc(t *testing.T) {
 		s := v.LoadLink()
 		checkValue(t, s.Get, 1)
 
-		s.Set(10)
-		checkValue(t, v.Get, 1)
-		checkValue(t, s.Get, 10)
-
 		if !s.Validate() {
 			t.Error("Validate reported false")
 		}
 
 		checkValue(t, v.Get, 1)
 
-		if !s.StoreCond() {
+		if !s.StoreCond(10) {
 			t.Error("StoreCond reported false")
 		}
-		if s.StoreCond() {
+		checkValue(t, s.Get, 10) // updated
+
+		if s.StoreCond(10) {
 			t.Errorf("Second StoreCond reported true")
 		}
 		checkValue(t, v.Get, 10)
-		checkValue(t, s.Get, 10)
 	})
 
 	t.Run("Fail/Set", func(t *testing.T) {
@@ -238,7 +235,7 @@ func TestValue_llsc(t *testing.T) {
 		v.Set(20)
 		checkValue(t, v.Get, 20)
 
-		if s.StoreCond() {
+		if s.StoreCond(25) {
 			t.Error("StoreCond reported true")
 		}
 		checkValue(t, v.Get, 20)
@@ -247,33 +244,29 @@ func TestValue_llsc(t *testing.T) {
 	t.Run("Fail/SetSame", func(t *testing.T) {
 		s := v.LoadLink()
 		checkValue(t, s.Get, 20)
-		s.Set(25)
 
 		// Even a set back to the same value invalidates s.
 		v.Set(20)
 
-		if s.StoreCond() {
+		if s.StoreCond(25) {
 			t.Error("StoreCond reported true")
 		}
 		checkValue(t, v.Get, 20)
-		checkValue(t, s.Get, 25)
+		checkValue(t, s.Get, 20) // not updated
 	})
 
 	t.Run("Fail/StoreCond", func(t *testing.T) {
 		s1 := v.LoadLink()
-		s1.Set(30)
-
 		s2 := v.LoadLink()
-		s2.Set(40)
 
 		checkValue(t, v.Get, 20)
 
-		if !s1.StoreCond() {
+		if !s1.StoreCond(30) {
 			t.Error("StoreCond(1) reported false")
 		}
 		checkValue(t, v.Get, 30)
 
-		if s2.StoreCond() {
+		if s2.StoreCond(40) {
 			t.Error("StoreCond(2) reported true")
 		}
 		checkValue(t, v.Get, 30)
@@ -292,9 +285,8 @@ func TestValue_llsc(t *testing.T) {
 			done <- z
 		}()
 
-		s.Set(50)
 		<-ready
-		if !s.StoreCond() {
+		if !s.StoreCond(50) {
 			t.Error("StoreCond reported false")
 		}
 		select {

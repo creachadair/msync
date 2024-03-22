@@ -97,21 +97,17 @@ type Linked[T any] struct {
 // Get returns the current contents of the snapshot.
 func (lv *Linked[T]) Get() T { return lv.snap }
 
-// Set updates the contents of the snapshot. Modifications of the snapshot do
-// not affect the original value until a successful call to StoreCond.
-func (lv *Linked[T]) Set(v T) { lv.snap = v }
-
-// StoreCond attempts to update the linked Value with the current contents of
-// the snapshot, and reports whether doing so succeeded. Once StoreCond has
-// been called, lv is invalid.
+// StoreCond attempts to update the linked Value with v, and reports whether
+// doing so succeeded. Once StoreCond has been called, lv is invalid.
 //
 // StoreCond succeeds if no successful StoreCond or Set operation has been
 // applied to the underlying Value since the LoadLink that created lv.
-func (lv *Linked[T]) StoreCond() bool {
+func (lv *Linked[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
 	if lv.v.gen == lv.gen {
-		lv.v.setLocked(lv.snap)
+		lv.snap = v
+		lv.v.setLocked(v)
 		return true
 	}
 	return false

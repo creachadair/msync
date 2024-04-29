@@ -75,11 +75,17 @@ func (v *Value[T]) Wait(ctx context.Context) (T, bool) {
 	}
 }
 
-// LoadLink returns a linked view of the current value of v.
-func (v *Value[T]) LoadLink() *Linked[T] {
+// LoadLink links a view of the current value of v.
+// If lv == nil, a new linked value is allocated and returned.
+// Otherwise, the contents of *lv are replaced and lv is returned.
+func (v *Value[T]) LoadLink(lv *Linked[T]) *Linked[T] {
+	if lv == nil {
+		lv = new(Linked[T])
+	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	return &Linked[T]{v: v, snap: v.x, gen: v.gen}
+	lv.v, lv.snap, lv.gen = v, v.x, v.gen
+	return lv
 }
 
 // Linked is a snapshot of a Value acquired by a call to its LoadLink method.

@@ -204,7 +204,7 @@ func TestValue_llsc(t *testing.T) {
 	checkValue(t, v.Get, 1)
 
 	t.Run("Success", func(t *testing.T) {
-		s := v.LoadLink()
+		s := v.LoadLink(nil)
 		checkValue(t, s.Get, 1)
 
 		if !s.Validate() {
@@ -225,7 +225,7 @@ func TestValue_llsc(t *testing.T) {
 	})
 
 	t.Run("Fail/Set", func(t *testing.T) {
-		s := v.LoadLink()
+		s := v.LoadLink(nil)
 		checkValue(t, s.Get, 10)
 
 		if !s.Validate() {
@@ -242,7 +242,7 @@ func TestValue_llsc(t *testing.T) {
 	})
 
 	t.Run("Fail/SetSame", func(t *testing.T) {
-		s := v.LoadLink()
+		s := v.LoadLink(nil)
 		checkValue(t, s.Get, 20)
 
 		// Even a set back to the same value invalidates s.
@@ -256,8 +256,17 @@ func TestValue_llsc(t *testing.T) {
 	})
 
 	t.Run("Fail/StoreCond", func(t *testing.T) {
-		s1 := v.LoadLink()
-		s2 := v.LoadLink()
+		var v1, v2 msync.Linked[int]
+
+		s1 := v.LoadLink(&v1)
+		s2 := v.LoadLink(&v2)
+
+		if s1 != &v1 {
+			t.Errorf("LoadLink(v1): got %p, want %p", s1, &v1)
+		}
+		if s2 != &v2 {
+			t.Errorf("LoadLink(v2): got %p, want %p", s2, &v2)
+		}
 
 		checkValue(t, v.Get, 20)
 
@@ -273,7 +282,7 @@ func TestValue_llsc(t *testing.T) {
 	})
 
 	t.Run("StoreCondWait", func(t *testing.T) {
-		s := v.LoadLink()
+		s := v.LoadLink(nil)
 
 		// Verify that a successful StoreCond triggers waiters.
 		ready := make(chan struct{})

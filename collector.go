@@ -17,7 +17,10 @@ var ErrClosed = errors.New("collector is closed")
 // closed any pending writes are safely terminated and report errors rather
 // than panicking.
 type Collector[T any] struct {
-	μ    sync.RWMutex  // admission control for senders to ch
+	// μ protects the fields below:
+	// Lock μ shared to copy or send to ch.
+	// Lock μ exclusively to close ch or modify either field.
+	μ    sync.RWMutex
 	ch   chan T        // delivers values to the receiver
 	done chan struct{} // closed when the collector is closed
 }

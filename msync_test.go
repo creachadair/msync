@@ -382,7 +382,7 @@ func TestCollector(t *testing.T) {
 		const numWriters = 5
 		const numValues = 100
 
-		c := msync.NewCollector[int](0)
+		c := msync.Collect(make(chan int))
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
@@ -422,7 +422,7 @@ func TestCollector(t *testing.T) {
 	})
 
 	t.Run("Cancel", func(t *testing.T) {
-		c := msync.NewCollector[bool](0)
+		c := msync.Collect(make(chan bool))
 		defer c.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
@@ -434,7 +434,7 @@ func TestCollector(t *testing.T) {
 	})
 
 	t.Run("MultiClose", func(t *testing.T) {
-		c := msync.NewCollector[any](0)
+		c := msync.Collect(make(chan any))
 		if err := c.Close(); err != nil {
 			t.Errorf("Close 1: got %v, want nil", err)
 		}

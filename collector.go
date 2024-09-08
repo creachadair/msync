@@ -10,12 +10,10 @@ import (
 // before a value could be delivered.
 var ErrClosed = errors.New("collector is closed")
 
-// A Collector is a fan-in channel that delivers values from multiple writers
-// to one or more readers.
-//
-// A collector wraps and behaves like a normal buffered channel, but when c is
-// closed any pending writes are safely terminated and report errors rather
-// than panicking.
+// A Collector manages a fan-in channel shared by multiple readers and writers.
+// It wraps and behaves like a normal buffered channel, but when c is closed
+// any pending writes are safely terminated and report errors rather than
+// panicking.
 type Collector[T any] struct {
 	// μ protects the fields below:
 	// Lock μ shared to copy or send to ch.
@@ -25,10 +23,13 @@ type Collector[T any] struct {
 	done chan struct{} // closed when the collector is closed
 }
 
-// NewCollector creates a new collector with the specified channel buffer
-// capacity.  If cap == 0, the collector is unbuffered.
-func NewCollector[T any](cap int) *Collector[T] {
-	return &Collector[T]{ch: make(chan T, cap), done: make(chan struct{})}
+// Collect returns a new collector wrapping the specified channel.
+//
+// The collector takes ownership of ch, and the caller must not access ch
+// except via the methods of the Collector. The channel may be buffered or
+// unbuffered.
+func Collect[T any](ch chan T) *Collector[T] {
+	return &Collector[T]{ch: ch, done: make(chan struct{})}
 }
 
 // Recv returns a channel to which sent values are delivered.  The returned

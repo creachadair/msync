@@ -14,7 +14,8 @@ import "sync"
 // The Signal method immediately resets the trigger, acting as Set and Reset
 // done in a single step.
 //
-// A zero Trigger is ready for use but must not be copied after first use.
+// A zero Trigger is ready for use, and is inactive, but must not be copied
+// after any of its methods have been called.
 type Trigger struct {
 	μ      sync.Mutex
 	ch     chan struct{}
@@ -23,10 +24,11 @@ type Trigger struct {
 	// The signal channel is lazily initialized by the first waiter.
 }
 
-// NewTrigger constructs a new unready Trigger.
+// NewTrigger constructs a new inactive Trigger.
 func NewTrigger() *Trigger { return new(Trigger) }
 
-// Signal activates and immediately resets the trigger.
+// Signal activates and immediately resets the trigger.  If the trigger was
+// already active, this is equivalent to Reset.
 func (t *Trigger) Signal() {
 	t.μ.Lock()
 	defer t.μ.Unlock()
@@ -38,7 +40,8 @@ func (t *Trigger) Signal() {
 	t.closed = false
 }
 
-// Set activates the trigger, if it is not already active.
+// Set activates the trigger. If the trigger was already active, it has no
+// effect.
 func (t *Trigger) Set() {
 	t.μ.Lock()
 	defer t.μ.Unlock()
@@ -52,7 +55,8 @@ func (t *Trigger) Set() {
 	t.closed = true
 }
 
-// Reset resets the trigger.
+// Reset resets the trigger. If the trigger was already inactive, it has no
+// effect.
 func (t *Trigger) Reset() {
 	t.μ.Lock()
 	defer t.μ.Unlock()
@@ -63,7 +67,8 @@ func (t *Trigger) Reset() {
 	}
 }
 
-// Ready returns a channel that is closed when t is signaled.
+// Ready returns a channel that is closed when t is activated.  If t is active
+// when Ready is called, the returned channel will already be closed.
 func (t *Trigger) Ready() <-chan struct{} {
 	t.μ.Lock()
 	defer t.μ.Unlock()

@@ -422,6 +422,8 @@ func TestCollector(t *testing.T) {
 	})
 
 	t.Run("Cancel", func(t *testing.T) {
+		defer leaktest.Check(t)()
+
 		c := msync.Collect(make(chan bool))
 		defer c.Close()
 

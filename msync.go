@@ -107,7 +107,7 @@ func (lv *Linked[T]) Get() T { return lv.snap }
 // doing so succeeded. Once StoreCond has been called, lv is invalid.
 //
 // StoreCond succeeds if no successful StoreCond or Set operation has been
-// applied to the underlying Value since the LoadLink that created lv.
+// applied to the underlying Value since the LoadLink that initialized lv.
 func (lv *Linked[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

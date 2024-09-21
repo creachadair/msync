@@ -17,6 +17,7 @@ func TestTrigger(t *testing.T) {
 	defer leaktest.Check(t)()
 
 	checkNotActive := func(t *testing.T, tr *msync.Trigger) {
+		t.Helper()
 		select {
 		case <-tr.Ready():
 			t.Error("Trigger is active when it should not be")

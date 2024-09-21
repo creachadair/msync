@@ -147,7 +147,7 @@ func TestFlag(t *testing.T) {
 	var sum int
 	go func() {
 		defer close(done)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			sum += <-f.Ready()
 			p.Set(nil)
 		}
@@ -400,8 +400,7 @@ func TestCollector(t *testing.T) {
 		}()
 
 		ctx := context.Background()
-		for i := 0; i < numWriters; i++ {
-			w := i + 1
+		for i := range numWriters {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -410,7 +409,7 @@ func TestCollector(t *testing.T) {
 				for {
 					if err := c.Send(ctx, rand.Intn(500)-250); err != nil {
 						if !errors.Is(err, msync.ErrClosed) {
-							t.Errorf("Writer %d: got error %v, want %v", w, err, msync.ErrClosed)
+							t.Errorf("Writer %d: got error %v, want %v", i+1, err, msync.ErrClosed)
 						}
 						return
 					}

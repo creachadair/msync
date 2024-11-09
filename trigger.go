@@ -48,8 +48,8 @@ func (t *Trigger) Set() {
 
 	if t.ch == nil {
 		t.ch = make(chan struct{})
-		close(t.ch)
-	} else if !t.closed {
+	}
+	if !t.closed {
 		close(t.ch)
 	}
 	t.closed = true

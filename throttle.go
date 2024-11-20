@@ -128,3 +128,48 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 	t.μ.Unlock()
 	return zero, ctx.Err()
 }
+
+// ThrottleSet is a collection of [Throttle] values indexed by key.
+// A zero value is ready for use, but must not be copied after first use.
+type ThrottleSet[T any] struct {
+	μ        sync.Mutex // protects throttle
+	throttle map[string]*Throttle[T]
+}
+
+// Call calls the throttle associated with key, constructing a new one if
+// necessary. Call is safe for use by multiple concurrent goroutines.
+//
+// All concurrent callers of Call with a given key share a single [Throttle].
+func (t *ThrottleSet[T]) Call(ctx context.Context, key string, run func(context.Context) (T, error)) (T, error) {
+	tkey := func() *Throttle[T] {
+		t.μ.Lock()
+		defer t.μ.Unlock()
+		tkey, ok := t.throttle[key]
+		if !ok {
+			if t.throttle == nil {
+				t.throttle = make(map[string]*Throttle[T])
+			}
+			tkey = NewThrottle(run)
+			t.throttle[key] = tkey
+		}
+		return tkey
+	}()
+	defer func() {
+		t.μ.Lock()
+		defer t.μ.Unlock()
+
+		// If the throttle for this key is still the one that just finished
+		// executing (that is, tkey), remove it from the set: Any other
+		// concurrent goroutines sharing this throttle have either been delivered
+		// their pending values, given up from context termination, or panicked.
+		// Either way, this group is effectively done, and the next caller on
+		// this key should start with a fresh throttle.
+		//
+		// Note that we don't have to handle a panic here, as Throttle.Call has
+		// already converted a panic in the run function into an error.
+		if t.throttle[key] == tkey {
+			delete(t.throttle, key)
+		}
+	}()
+	return tkey.Call(ctx)
+}

@@ -149,3 +149,65 @@ func TestThrottle(t *testing.T) {
 		finish.Wait()
 	})
 }
+
+func TestThrottleSet(t *testing.T) {
+	var tset msync.ThrottleSet[int]
+	ctx := context.Background()
+
+	slowRandom := func(context.Context) (int, error) {
+		// Wait long enough that it is "sufficiently likely" all our probe calls
+		// will land on the same throttle.
+		time.Sleep(50 * time.Millisecond)
+		return rand.IntN(20000), nil
+	}
+
+	var wg sync.WaitGroup
+
+	// A bunch of goroutines using the same key should get the same value if
+	// they arrive in the same active period.
+	got := make([]int, 5)
+	for i := range got {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var err error
+			got[i], err = tset.Call(ctx, "apple", slowRandom)
+			if err != nil {
+				t.Errorf("Call apple: unexpected error: %v", err)
+			}
+		}()
+	}
+
+	// We ought not get the same value from a call under a different key.
+	var alt int
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var err error
+		alt, err = tset.Call(ctx, "pear", slowRandom)
+		if err != nil {
+			t.Errorf("Call pear: unexpected error: %v", err)
+		}
+	}()
+
+	wg.Wait()
+
+	// Verify that all the concurrent callers got the same value.
+	for i := range got[1:] {
+		if got[i] != got[i+1] {
+			t.Errorf("Result %d: got %d ≠ %d", i, got[i], got[i+1])
+		}
+	}
+
+	// Verify the caller of a different key got a different value.
+	if alt == got[0] {
+		t.Errorf("Call pear: got %d, want some other value", alt)
+	}
+
+	// Now that nobody is using "apple", we ought to get a different value too.
+	if alt, err := tset.Call(ctx, "apple", slowRandom); err != nil {
+		t.Fatalf("Call apple: unexpected error: %v", err)
+	} else if alt == got[0] {
+		t.Errorf("Call apple: got %d, want some other value", alt)
+	}
+}

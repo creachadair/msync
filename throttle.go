@@ -7,19 +7,19 @@ import (
 	"sync"
 )
 
-// A Throttle coalesces calls to a function so that all concurrently active
-// goroutines share the result of a single execution of the function made by
-// one of the participating goroutines.
+// A Throttle coalesces calls to a function so that all goroutines concurrently
+// executing [Throttle.Call] share the result of a single execution of the
+// function made by one of the participants.
 //
-// A Throttle is initially idle. The first goroutine to access an idle throttle
-// by calling [Throttle.Call] begins a new session. All goroutines that call
-// the throttle during an active session block until either:
+// A Throttle is initially idle. The first goroutine to execute [Throttle.Call]
+// on an idle throttle begins a new session. All goroutines that call the
+// throttle during an active session block until either:
 //
-//   - The context governing the call ends, in which case it reports a zero
+//   - The context governing that call ends, in which case it reports a zero
 //     value and the error that ended the context.
 //
 //   - The goroutine executing the throttled function completes its call and
-//     reports a value and error, which is shared among all the goroutines
+//     reports a value and error, which is then shared among all the goroutines
 //     participating in the session.
 //
 // If the execution of the throttled function ends because the context
@@ -59,6 +59,8 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 
 		if t.active {
 			// Someone is already working on the call, wait for them.
+			// N.B. buffer the channel so that if a waiter gives up, a successful
+			// call will not stall waiting for a receive.
 			ready := make(chan result[T], 1)
 			t.waits = append(t.waits, ready)
 			t.μ.Unlock()

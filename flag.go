@@ -1,14 +1,15 @@
 package msync
 
 // A Flag is a level-triggered single-value buffer shared by a producer and a
-// consumer. A producer calls Send to make a value available, and a consumer
-// calls Ready to obtain a channel which delivers the most recently-sent value.
+// consumer. A producer calls [Flag.Send] to make a value available, and a
+// consumer calls [Flag.Ready] to obtain a channel which delivers the most
+// recently-sent value.
 //
 // Setting value on the flag does not block: Once a value is set, additional
 // values are discarded until the buffered value is consumed.
 //
-// The Ready method returns a channel that delivers buffered values to the
-// consumer. Once a value has been consumed, the buffer is empty and the
+// The [Flag.Ready] method returns a channel that delivers buffered values to
+// the consumer. Once a value has been consumed, the buffer is empty and the
 // producer can send another.
 type Flag[T any] struct {
 	ch chan T

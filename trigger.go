@@ -2,17 +2,18 @@ package msync
 
 import "sync"
 
-// Trigger is an edge-triggered condition shared by multiple goroutines.
-// The Ready method returns a channel that is closed when the trigger is
+// Trigger is an edge-triggered condition shared by multiple goroutines.  The
+// [Trigger.Ready] method returns a channel that is closed when the trigger is
 // activated.
 //
 // When a trigger is first created it is inactive. It remains inactive until
-// the Set or Signal method is called, which causes the current ready channel
-// to be closed. Once a trigger has been activated, it remains active until it
-// is reset. Use the Reset method to reset the trigger to inactive.
+// [Trigger.Set] or [Trigger.Signal] is called, either of which causes the
+// current ready channel to be closed. Once a trigger has been activated, it
+// remains active until it is reset. Use [Trigger.Reset] to make the trigger
+// inactive.
 //
-// The Signal method immediately resets the trigger, acting as Set and Reset
-// done in a single step.
+// The [Trigger.Signal] method activates and then immediately resets the
+// trigger, acting as Set and Reset done in a single step.
 //
 // A zero Trigger is ready for use, and is inactive, but must not be copied
 // after any of its methods have been called.
@@ -24,11 +25,11 @@ type Trigger struct {
 	// The signal channel is lazily initialized by the first waiter.
 }
 
-// NewTrigger constructs a new inactive Trigger.
+// NewTrigger constructs a new inactive [Trigger].
 func NewTrigger() *Trigger { return new(Trigger) }
 
 // Signal activates and immediately resets the trigger.  If the trigger was
-// already active, this is equivalent to Reset.
+// already active, this is equivalent to [Trigger.Reset].
 func (t *Trigger) Signal() {
 	t.μ.Lock()
 	defer t.μ.Unlock()

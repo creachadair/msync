@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -52,6 +53,34 @@ func TestThrottle(t *testing.T) {
 				t.Errorf("Call: got %v, %v; want 12345, nil", got, err)
 			}
 		})
+	})
+
+	t.Run("AllGiveUp", func(t *testing.T) {
+		done := make(chan struct{})
+		th := msync.NewThrottle(func(ctx context.Context) (bool, error) {
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case <-done:
+				return true, nil
+			}
+		})
+
+		var wg sync.WaitGroup
+		for range 5 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), rand.N(5*time.Millisecond))
+				defer cancel()
+				v, err := th.Call(ctx)
+				if v || err == nil {
+					t.Errorf("Call: got (%v, %v), want (false, error)", v, err)
+				}
+			}()
+		}
+		wg.Wait()
+		close(done)
 	})
 
 	t.Run("Many", func(t *testing.T) {
@@ -104,8 +133,8 @@ func TestThrottle(t *testing.T) {
 
 		var start, finish sync.WaitGroup
 		start.Add(3)
-		finish.Add(3)
 		for range 3 {
+			finish.Add(1)
 			go func() {
 				defer finish.Done()
 				start.Done()

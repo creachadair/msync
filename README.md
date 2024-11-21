@@ -5,3 +5,8 @@
 
 This repository defines a library of Go types to help in the management of
 concurrency.
+
+## Packages
+
+- [throttle](./throttle) a throttle for concurrent function calls ([package docs](https://godoc.org/github.com/creachadair/msync/throttle))
+- [trigger](./trigger) an edge-triggered selectable condition variable ([package docs](https://godoc.org/github.com/creachadair/msync/trigger))

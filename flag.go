@@ -1,7 +1,7 @@
 package msync
 
 // A Flag is a level-triggered single-value buffer shared by a producer and a
-// consumer. A producer calls [Flag.Send] to make a value available, and a
+// consumer. A producer calls [Flag.Set] to make a value available, and a
 // consumer calls [Flag.Ready] to obtain a channel which delivers the most
 // recently-sent value.
 //

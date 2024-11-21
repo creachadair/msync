@@ -30,7 +30,7 @@ import (
 // concurrent goroutines have returned, the throttle is once again idle, and
 // the next caller will begin a new session.
 type Throttle[T any] struct {
-	run func(context.Context) (T, error)
+	run Func[T] // read-only after initialization
 
 	μ      sync.Mutex
 	waits  []chan result[T]
@@ -42,10 +42,11 @@ type result[T any] struct {
 	err   error
 }
 
+// Func is an alias for a function that can be managed by a [Throttle].
+type Func[T any] func(context.Context) (T, error)
+
 // New constructs a new [Throttle] that executes run.
-func New[T any](run func(context.Context) (T, error)) *Throttle[T] {
-	return &Throttle[T]{run: run}
-}
+func New[T any](run Func[T]) *Throttle[T] { return &Throttle[T]{run: run} }
 
 // Call invokes the function guarded by t. Call is safe for concurrent use by
 // multiple goroutines.
@@ -145,7 +146,7 @@ func NewSet[T any]() *Set[T] { return new(Set[T]) }
 // necessary. Call is safe for use by multiple concurrent goroutines.
 //
 // All concurrent callers of Call with a given key share a single [Throttle].
-func (s *Set[T]) Call(ctx context.Context, key string, run func(context.Context) (T, error)) (T, error) {
+func (s *Set[T]) Call(ctx context.Context, key string, run Func[T]) (T, error) {
 	tkey := func() *Throttle[T] {
 		s.μ.Lock()
 		defer s.μ.Unlock()

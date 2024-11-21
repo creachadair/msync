@@ -1,4 +1,6 @@
-package msync
+// Package throttle allows calls to a function to be coalesced among
+// multiple concurrent goroutines.
+package throttle
 
 import (
 	"context"
@@ -40,8 +42,8 @@ type result[T any] struct {
 	err   error
 }
 
-// NewThrottle constructs a new [Throttle] that executes run.
-func NewThrottle[T any](run func(context.Context) (T, error)) *Throttle[T] {
+// New constructs a new [Throttle] that executes run.
+func New[T any](run func(context.Context) (T, error)) *Throttle[T] {
 	return &Throttle[T]{run: run}
 }
 
@@ -129,34 +131,37 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 	return zero, ctx.Err()
 }
 
-// ThrottleSet is a collection of [Throttle] values indexed by key.
+// Set is a collection of [Throttle] values indexed by key.
 // A zero value is ready for use, but must not be copied after first use.
-type ThrottleSet[T any] struct {
+type Set[T any] struct {
 	μ        sync.Mutex // protects throttle
 	throttle map[string]*Throttle[T]
 }
+
+// NewSet constructs a new empty [Set].
+func NewSet[T any]() *Set[T] { return new(Set[T]) }
 
 // Call calls the throttle associated with key, constructing a new one if
 // necessary. Call is safe for use by multiple concurrent goroutines.
 //
 // All concurrent callers of Call with a given key share a single [Throttle].
-func (t *ThrottleSet[T]) Call(ctx context.Context, key string, run func(context.Context) (T, error)) (T, error) {
+func (s *Set[T]) Call(ctx context.Context, key string, run func(context.Context) (T, error)) (T, error) {
 	tkey := func() *Throttle[T] {
-		t.μ.Lock()
-		defer t.μ.Unlock()
-		tkey, ok := t.throttle[key]
+		s.μ.Lock()
+		defer s.μ.Unlock()
+		tkey, ok := s.throttle[key]
 		if !ok {
-			if t.throttle == nil {
-				t.throttle = make(map[string]*Throttle[T])
+			if s.throttle == nil {
+				s.throttle = make(map[string]*Throttle[T])
 			}
-			tkey = NewThrottle(run)
-			t.throttle[key] = tkey
+			tkey = New(run)
+			s.throttle[key] = tkey
 		}
 		return tkey
 	}()
 	defer func() {
-		t.μ.Lock()
-		defer t.μ.Unlock()
+		s.μ.Lock()
+		defer s.μ.Unlock()
 
 		// If the throttle for this key is still the one that just finished
 		// executing (that is, tkey), remove it from the set: Any other
@@ -167,8 +172,8 @@ func (t *ThrottleSet[T]) Call(ctx context.Context, key string, run func(context.
 		//
 		// Note that we don't have to handle a panic here, as Throttle.Call has
 		// already converted a panic in the run function into an error.
-		if t.throttle[key] == tkey {
-			delete(t.throttle, key)
+		if s.throttle[key] == tkey {
+			delete(s.throttle, key)
 		}
 	}()
 	return tkey.Call(ctx)

@@ -1,4 +1,4 @@
-package msync_test
+package throttle_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/creachadair/msync"
+	"github.com/creachadair/msync/throttle"
 	"github.com/fortytw2/leaktest"
 )
 
@@ -18,7 +18,7 @@ func TestThrottle(t *testing.T) {
 	defer leaktest.Check(t)()
 
 	t.Run("Basic", func(t *testing.T) {
-		th := msync.NewThrottle(func(context.Context) (int, error) {
+		th := throttle.New(func(context.Context) (int, error) {
 			return 12345, nil
 		})
 		for range 3 {
@@ -29,7 +29,7 @@ func TestThrottle(t *testing.T) {
 	})
 
 	t.Run("Slow", func(t *testing.T) {
-		th := msync.NewThrottle(func(ctx context.Context) (int, error) {
+		th := throttle.New(func(ctx context.Context) (int, error) {
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
@@ -57,7 +57,7 @@ func TestThrottle(t *testing.T) {
 
 	t.Run("AllGiveUp", func(t *testing.T) {
 		done := make(chan struct{})
-		th := msync.NewThrottle(func(ctx context.Context) (bool, error) {
+		th := throttle.New(func(ctx context.Context) (bool, error) {
 			select {
 			case <-ctx.Done():
 				return false, ctx.Err()
@@ -87,7 +87,7 @@ func TestThrottle(t *testing.T) {
 		type idKey struct{}
 
 		var active atomic.Int32
-		th := msync.NewThrottle(func(ctx context.Context) (string, error) {
+		th := throttle.New(func(ctx context.Context) (string, error) {
 			id := ctx.Value(idKey{}).(int)
 
 			v := active.Add(1)
@@ -126,7 +126,7 @@ func TestThrottle(t *testing.T) {
 
 	t.Run("Panic", func(t *testing.T) {
 		ready := make(chan struct{})
-		th := msync.NewThrottle(func(context.Context) (bool, error) {
+		th := throttle.New(func(context.Context) (bool, error) {
 			<-ready
 			panic("oh no")
 		})
@@ -150,8 +150,8 @@ func TestThrottle(t *testing.T) {
 	})
 }
 
-func TestThrottleSet(t *testing.T) {
-	var tset msync.ThrottleSet[int]
+func TestSet(t *testing.T) {
+	var tset throttle.Set[int]
 	ctx := context.Background()
 
 	slowRandom := func(context.Context) (int, error) {

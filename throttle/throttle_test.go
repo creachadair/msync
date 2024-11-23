@@ -196,9 +196,9 @@ func TestSet(t *testing.T) {
 	wg.Wait()
 
 	// Verify that all the concurrent callers got the same value.
-	for i := range got[1:] {
-		if got[i] != got[i+1] {
-			t.Errorf("Result %d: got %d ≠ %d", i, got[i], got[i+1])
+	for i, next := range got[1:] {
+		if got[i] != next {
+			t.Errorf("Result %d: got %d ≠ %d", i, got[i], next)
 		}
 	}
 

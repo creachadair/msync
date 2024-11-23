@@ -20,6 +20,15 @@ func TestTrigger(t *testing.T) {
 		default:
 		}
 	}
+	checkActive := func(t *testing.T, tr *trigger.Cond, msg string, args ...any) {
+		t.Helper()
+		select {
+		case <-tr.Ready():
+			t.Logf(msg, args...)
+		case <-time.After(time.Second):
+			t.Error("Trigger is not ready when it should be")
+		}
+	}
 
 	t.Run("Signal", func(t *testing.T) {
 		// Start up a bunch of tasks that listen to a trigger, signal the trigger,
@@ -74,23 +83,20 @@ func TestTrigger(t *testing.T) {
 			ch := tr.Ready()
 			close(start)
 			<-ch
+			t.Log("OK, early observer saw the trigger fire")
 			close(done)
 		}()
 		<-start
 
 		tr.Set()
+		checkActive(t, tr, "OK, set trigger is active")
 		tr.Set() // safe to do it multiple times
 		for i := range 3 {
-			select {
-			case <-tr.Ready():
-				t.Logf("OK, set trigger is active (check %d)", i+1)
-			case <-time.After(time.Second):
-				t.Error("Trigger is not ready when it should be")
-			}
+			checkActive(t, tr, "OK, set trigger is still active (check %d)", i+1)
 		}
+
 		select {
 		case <-done:
-			t.Log("OK, early observer saw the trigger fire")
 		case <-time.After(time.Second):
 			t.Error("Early observer did not see the activation")
 		}

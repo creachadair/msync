@@ -28,18 +28,21 @@ func TestThrottle(t *testing.T) {
 		}
 	})
 
+	const shortTime = 10 * time.Millisecond
+	const longTime = 5 * shortTime
+
 	t.Run("Slow", func(t *testing.T) {
 		th := throttle.New(func(ctx context.Context) (int, error) {
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
-			case <-time.After(50 * time.Millisecond):
+			case <-time.After(longTime):
 				return 12345, nil
 			}
 		})
 
 		t.Run("Fail", func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), shortTime)
 			defer cancel()
 
 			got, err := th.Call(ctx)

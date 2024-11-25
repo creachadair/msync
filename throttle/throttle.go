@@ -134,26 +134,26 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 
 // Set is a collection of [Throttle] values indexed by key.
 // A zero value is ready for use, but must not be copied after first use.
-type Set[T any] struct {
+type Set[Key comparable, T any] struct {
 	μ        sync.Mutex // protects throttle
-	throttle map[string]*Throttle[T]
+	throttle map[Key]*Throttle[T]
 }
 
 // NewSet constructs a new empty [Set].
-func NewSet[T any]() *Set[T] { return new(Set[T]) }
+func NewSet[Key comparable, T any]() *Set[Key, T] { return new(Set[Key, T]) }
 
 // Call calls the throttle associated with key, constructing a new one if
 // necessary. Call is safe for use by multiple concurrent goroutines.
 //
 // All concurrent callers of Call with a given key share a single [Throttle].
-func (s *Set[T]) Call(ctx context.Context, key string, run Func[T]) (T, error) {
+func (s *Set[Key, T]) Call(ctx context.Context, key Key, run Func[T]) (T, error) {
 	tkey := func() *Throttle[T] {
 		s.μ.Lock()
 		defer s.μ.Unlock()
 		tkey, ok := s.throttle[key]
 		if !ok {
 			if s.throttle == nil {
-				s.throttle = make(map[string]*Throttle[T])
+				s.throttle = make(map[Key]*Throttle[T])
 			}
 			tkey = New(run)
 			s.throttle[key] = tkey

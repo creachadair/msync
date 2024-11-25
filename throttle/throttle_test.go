@@ -154,7 +154,7 @@ func TestThrottle(t *testing.T) {
 }
 
 func TestSet(t *testing.T) {
-	var tset throttle.Set[int]
+	var tset throttle.Set[string, int]
 	ctx := context.Background()
 
 	slowRandom := func(context.Context) (int, error) {
@@ -213,4 +213,62 @@ func TestSet(t *testing.T) {
 	} else if alt == got[0] {
 		t.Errorf("Call apple: got %d, want some other value", alt)
 	}
+}
+
+func TestRaces(t *testing.T) {
+	var data struct {
+		sync.RWMutex
+		v []int
+	}
+	data.v = make([]int, 1024)
+	n := len(data.v)
+
+	write1 := func(pos, v int) throttle.Func[int] {
+		return func(context.Context) (int, error) {
+			data.Lock()
+			defer data.Unlock()
+			data.v[pos] = v
+			return 0, nil
+		}
+	}
+	var write throttle.Set[int, int]
+
+	sum := throttle.New(func(context.Context) (sum int, _ error) {
+		data.RLock()
+		defer data.RUnlock()
+		for _, v := range data.v {
+			sum += v
+		}
+		return
+	})
+
+	// Run several goroutines in parallel contending for access to the throttles
+	// managed by write and sum. This gives the race and deadlock detectors
+	// something to push against.
+	const numTasks = 32
+	const numOps = 200
+
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	for range numTasks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var rnd uint32
+			for range numOps {
+				if rnd == 0 {
+					rnd = rand.Uint32()
+				}
+				switch rnd & 1 {
+				case 0:
+					pos := rand.N(n)
+					write.Call(ctx, pos, write1(pos, rand.N(200000)))
+				case 1:
+					sum.Call(ctx)
+				}
+				rnd >>= 1
+			}
+		}()
+	}
+	wg.Wait()
 }

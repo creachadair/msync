@@ -74,15 +74,14 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 				return zero, ctx.Err()
 			case r, ok := <-ready:
 				// The previous caller is finished.
-				t.μ.Lock()
 				if ok {
 					// The previous caller determined the result.
-					t.μ.Unlock()
 					return r.value, r.err
 				}
 
 				// The previous caller did not determine a result.
 				// We should go back and retry (if our ctx is still alive).
+				t.μ.Lock()
 				continue
 			}
 

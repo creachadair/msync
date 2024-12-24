@@ -92,6 +92,7 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 		// report some other error.
 		t.μ.Unlock()
 		v, err := func() (_ T, err error) {
+			defer t.μ.Lock()
 			defer func() {
 				if x := recover(); x != nil {
 					err = fmt.Errorf("panic in run: %v\n%s", x, string(debug.Stack()))
@@ -99,7 +100,6 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 			}()
 			return t.run(ctx)
 		}()
-		t.μ.Lock()
 		t.active = false
 
 		// If run succeeded, or our context has not yet completed, the result is

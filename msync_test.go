@@ -104,16 +104,6 @@ func TestValue(t *testing.T) {
 			v.Set(s)
 		})
 	}
-	mustWait := func(ctx context.Context, wantV string, wantF bool) {
-		got, ok := v.Wait(ctx)
-		if got != wantV {
-			t.Errorf("Wait value: got %q, want %q", got, wantV)
-		}
-		if ok != wantF {
-			t.Errorf("Wait flag: got %v, want %v", ok, wantF)
-		}
-	}
-
 	ctx := context.Background()
 
 	// Verify the initial value.
@@ -124,30 +114,38 @@ func TestValue(t *testing.T) {
 	mustGet("pear")
 
 	// Verify that a waiter wakes for a set.
-	setAfter(5*time.Millisecond, "plum")
-	mustWait(ctx, "plum", true)
-	mustGet("plum")
+	t.Run("Wait", func(t *testing.T) {
+		ch := v.Wait()
+		setAfter(5*time.Millisecond, "plum")
+		if got, ok := <-ch; !ok || got != "plum" {
+			t.Errorf("Wait: got %q, %v; want plum, true", got, ok)
+		}
+		mustGet("plum")
+	})
 
 	// Verify that a waiter times out if no Set occurs.
 	t.Run("Timeout", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer cancel()
-		mustWait(ctx, "plum", false)
+
+		ch := v.Wait()
+		select {
+		case <-ctx.Done():
+			t.Log("Correctly timed out waiting for update")
+		case got := <-ch:
+			t.Errorf("Got value %q, wanted timeout", got)
+		}
 	})
 
 	// Verify that Wait gets the value of a concurrent Set.
 	t.Run("Concur", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(ctx, 15*time.Millisecond)
-		defer cancel()
+		ch := v.Wait()
 
 		setAfter(2000*time.Microsecond, "cherry")
 		setAfter(1500*time.Microsecond, "raspberry")
 
-		got, ok := v.Wait(ctx)
+		got := <-ch
 		checkOneOf(t, "Wait value", got, "raspberry", "cherry")
-		if !ok {
-			t.Error("Wait: got false flag, wanted true")
-		}
 	})
 
 	// Clean up goroutines for the leak checker.
@@ -249,16 +247,7 @@ func TestValue_llsc(t *testing.T) {
 		s := v.LoadLink(nil)
 
 		// Verify that a successful StoreCond triggers waiters.
-		ready := make(chan struct{})
-		done := make(chan int, 1)
-		go func() {
-			defer close(done)
-			close(ready)
-			z, _ := v.Wait(context.Background())
-			done <- z
-		}()
-
-		<-ready
+		done := v.Wait()
 		if !s.StoreCond(50) {
 			t.Error("StoreCond reported false")
 		}

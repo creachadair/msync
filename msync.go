@@ -2,7 +2,6 @@
 package msync
 
 import (
-	"context"
 	"sync"
 )
 
@@ -14,10 +13,10 @@ import (
 // pointer or a slice is stored in a Value, the caller must not modify the
 // contents without separate synchronization.
 type Value[T any] struct {
-	mu    sync.Mutex
-	x     T
-	gen   uint64        // write generation, incremented by Set and SC
-	ready chan struct{} // signal channel for Wait
+	mu   sync.Mutex
+	x    T
+	gen  uint64   // write generation, incremented by Set and SC
+	wait []chan T // reporting channels for wait
 }
 
 // NewValue creates a new Value with the given initial value.
@@ -35,10 +34,12 @@ func (v *Value[T]) Set(newValue T) {
 func (v *Value[T]) setLocked(newValue T) {
 	v.x = newValue
 	v.gen++
-	if v.ready != nil {
-		close(v.ready)
-		v.ready = nil
+
+	for _, ch := range v.wait {
+		ch <- newValue
+		close(ch)
 	}
+	v.wait = v.wait[:0]
 }
 
 // Get returns the current value stored in v.
@@ -48,31 +49,20 @@ func (v *Value[T]) Get() T {
 	return v.x
 }
 
-// Wait blocks until v.Set is called, or until ctx ends, and returns the
-// current value in v. The flag indicates whether Set was called (true) or ctx
-// timed out (false).
+// Wait returns a new channel that blocks until the value of v changes, then
+// delivers the current value of v. Each call to Wait returns a new channel.
+// Once a value has been delivered to the channel, it is closed.
 //
-// If v.Set is not called before ctx ends, Wait returns the value v held when
-// Wait was called. Otherwise, Wait returns the value from one of the v.Set
-// calls made during its execution.
-//
-// If multiple goroutines set v concurrently with a call to Wait, the Wait call
-// will return the value from one of them, but not necessarily the first.
-func (v *Value[T]) Wait(ctx context.Context) (T, bool) {
+// If multiple goroutines set v concurrently, the channel will deliver the
+// value from one of them, but not necessarily the first.
+func (v *Value[T]) Wait() <-chan T {
 	v.mu.Lock()
-	if v.ready == nil {
-		v.ready = make(chan struct{})
-	}
-	old, ready := v.x, v.ready
-	v.mu.Unlock()
-	select {
-	case <-ctx.Done():
-		return old, false
-	case <-ready:
-		v.mu.Lock()
-		defer v.mu.Unlock()
-		return v.x, true
-	}
+	defer v.mu.Unlock()
+
+	// Buffer so that delivery does not block if the caller gives up.
+	ch := make(chan T, 1)
+	v.wait = append(v.wait, ch)
+	return ch
 }
 
 // LoadLink links a view of the current value of v.

@@ -20,15 +20,21 @@ import (
 //   - The context governing that call ends, in which case it reports a zero
 //     value and the error that ended the context.
 //
-//   - The goroutine executing the throttled function completes its call and
-//     reports a value and error, which is then shared among all the goroutines
-//     participating in the session.
+//   - The goroutine executing the throttled target function completes its call
+//     and reports a value and error, which is then shared among all the
+//     goroutines participating in the session.
 //
 // If the execution of the throttled function ends because the context
 // governing its calling goroutine ended, another waiting goroutine (if any) is
 // woken up and given an oppoartunity to call the throttled function.  Once all
 // concurrent goroutines have returned, the throttle is once again idle, and
 // the next caller will begin a new session.
+//
+// Within a given session, it is possible the target function may partially
+// execute multiple times, if the goroutine doing so returns early due to
+// context termination. It will only be executed by a single goroutine at a
+// time, however; and if it completes before its context ends (even with an
+// error) it will not be executed again within the scope of that session.
 type Throttle[T any] struct {
 	run Func[T] // read-only after initialization
 
@@ -50,6 +56,11 @@ func New[T any](run Func[T]) *Throttle[T] { return &Throttle[T]{run: run} }
 
 // Call invokes the function guarded by t. Call is safe for concurrent use by
 // multiple goroutines.
+//
+// If ctx ends before a value is resolved, Call returns a zero value and the
+// context error. Otherwise, it returns the value and error from calling the
+// underlying function, resolved by whichever goroutine successfully completed
+// the call.
 func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 	var zero T
 

@@ -28,6 +28,19 @@ func TestThrottle(t *testing.T) {
 		}
 	})
 
+	t.Run("Cancelled", func(t *testing.T) {
+		th := throttle.New(func(context.Context) (int, error) {
+			return -1, errors.New("not seen")
+		})
+		dead, cancel := context.WithCancel(context.Background())
+		cancel() // N.B. before starting (that is what we're testing)
+
+		v, err := th.Call(dead)
+		if v != 0 || !errors.Is(err, context.Canceled) {
+			t.Errorf("Got %v, %v, want 0, %v", v, err, context.Canceled)
+		}
+	})
+
 	const shortTime = 10 * time.Millisecond
 	const longTime = 5 * shortTime
 

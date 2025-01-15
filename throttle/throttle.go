@@ -113,8 +113,10 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 		}()
 		t.active = false
 
-		// If run succeeded, or our context has not yet completed, the result is
-		// determined.  Propagate it to any waiting tasks, and then return it.
+		// If run succeeded, or if it reported an error but our context has not
+		// yet ended (signifying the error is from the target function), then the
+		// result is determined.  Propagate it to any waiting tasks, and then
+		// return it.
 		if err == nil || ctx.Err() == nil {
 			for _, w := range t.waits {
 				w <- result[T]{value: v, err: err}
@@ -131,7 +133,6 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 			close(w) // N.B. no value sent signals a retry is needed
 		}
 		t.waits = nil
-		break
 	}
 
 	// Reaching here, our context has ended with no result determined.

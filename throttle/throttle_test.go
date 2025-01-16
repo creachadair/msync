@@ -139,31 +139,6 @@ func TestThrottle(t *testing.T) {
 			t.Errorf("Have %d active after all complete", v)
 		}
 	})
-
-	t.Run("Panic", func(t *testing.T) {
-		ready := make(chan struct{})
-		th := throttle.New(func(context.Context) (bool, error) {
-			<-ready
-			panic("oh no")
-		})
-
-		var start, finish sync.WaitGroup
-		start.Add(3)
-		for range 3 {
-			finish.Add(1)
-			go func() {
-				defer finish.Done()
-				start.Done()
-				v, err := th.Call(context.Background())
-				if err == nil {
-					t.Errorf("Call: got %v, want error", v)
-				}
-			}()
-		}
-		start.Wait()
-		close(ready)
-		finish.Wait()
-	})
 }
 
 func TestSet(t *testing.T) {

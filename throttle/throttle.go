@@ -4,8 +4,6 @@ package throttle
 
 import (
 	"context"
-	"fmt"
-	"runtime/debug"
 	"sync"
 )
 
@@ -127,11 +125,6 @@ func (t *Throttle[T]) runProtectLocked(ctx context.Context) (_ T, err error) {
 	defer func() {
 		t.μ.Lock()
 		t.active = false // N.B. after re-acquire
-	}()
-	defer func() {
-		if x := recover(); x != nil {
-			err = fmt.Errorf("panic in run: %v\n%s", x, string(debug.Stack()))
-		}
 	}()
 	return t.run(ctx)
 }

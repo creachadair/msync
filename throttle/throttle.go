@@ -65,79 +65,75 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 	var zero T
 
 	t.μ.Lock()
-	for ctx.Err() == nil {
-		// Safety check: The lock must be held at this point.
-		if t.μ.TryLock() {
-			panic("lock is not held at start of call")
-		}
+	for t.active {
+		// Someone is already working on the call, wait for them.
+		// N.B. buffer the channel so that if a waiter gives up, a successful
+		// call will not stall waiting for a receive.
+		ready := make(chan result[T], 1)
+		t.waits = append(t.waits, ready)
 
-		if t.active {
-			// Someone is already working on the call, wait for them.
-			// N.B. buffer the channel so that if a waiter gives up, a successful
-			// call will not stall waiting for a receive.
-			ready := make(chan result[T], 1)
-			t.waits = append(t.waits, ready)
-			t.μ.Unlock()
-
-			select {
-			case <-ctx.Done():
-				// Our context has ended, give up on the call.
-				return zero, ctx.Err()
-			case r, ok := <-ready:
-				// The previous caller is finished.
-				if ok {
-					// The previous caller determined the result.
-					return r.value, r.err
-				}
-			}
-			// The previous caller did not determine a result.
-			// We should go back and retry (if our ctx is still alive).
-			t.μ.Lock()
-			continue
-		}
-
-		// Begin a new session.
-		t.active = true
-
-		// Attempt to determine the result. This may fail if ctx ends, or may
-		// report some other error.
 		t.μ.Unlock()
-		v, err := func() (_ T, err error) {
-			defer t.μ.Lock()
-			defer func() {
-				if x := recover(); x != nil {
-					err = fmt.Errorf("panic in run: %v\n%s", x, string(debug.Stack()))
-				}
-			}()
-			return t.run(ctx)
-		}()
-		t.active = false
-
-		// If run succeeded, or if it reported an error but our context has not
-		// yet ended (signifying the error is from the target function), then the
-		// result is determined.  Propagate it to any waiting tasks, and then
-		// return it.
-		if err == nil || ctx.Err() == nil {
-			for _, w := range t.waits {
-				w <- result[T]{value: v, err: err}
-				close(w)
+		select {
+		case <-ctx.Done():
+			// Our context has ended, give up on the call.
+			return zero, ctx.Err()
+		case r, ok := <-ready:
+			// The previous caller is finished.
+			if ok {
+				// The previous caller determined the result.
+				return r.value, r.err
 			}
-			t.waits = nil
-			t.μ.Unlock()
-			return v, err
 		}
+		t.μ.Lock()
 
-		// Otherwise, ctx ended before we could determine the result.  Signal any
-		// waiting tasks that they should try, and then fail back to the caller.
+		// The previous caller did not determine a result.
+		// We should go back and retry (if our ctx is still alive).
+	}
+	defer t.μ.Unlock()
+
+	// Attempt to determine the result. This may fail if ctx ends, or may
+	// report some other error.
+	v, err := t.runProtectLocked(ctx)
+
+	// If run succeeded, or if it reported an error but our context has not
+	// yet ended (signifying the error is from the target function), then the
+	// result is determined.  Propagate it to any waiting tasks, and then
+	// return it.
+	if err == nil || ctx.Err() == nil {
 		for _, w := range t.waits {
-			close(w) // N.B. no value sent signals a retry is needed
+			w <- result[T]{value: v, err: err}
+			close(w)
 		}
 		t.waits = nil
+		return v, err
 	}
 
+	// Otherwise, ctx ended before we could determine the result.  Signal any
+	// waiting tasks that they should try, and then fail back to the caller.
+	for _, w := range t.waits {
+		close(w) // N.B. no value sent signals a retry is needed
+	}
+	t.waits = nil
+
 	// Reaching here, our context has ended with no result determined.
-	t.μ.Unlock()
 	return zero, ctx.Err()
+}
+
+// runProtectLocked calls t.run(ctx) outside the lock, and reports its result.
+// The caller must hold t.μ.
+func (t *Throttle[T]) runProtectLocked(ctx context.Context) (_ T, err error) {
+	t.active = true
+	t.μ.Unlock() // release the lock while running
+	defer func() {
+		t.μ.Lock()
+		t.active = false // N.B. after re-acquire
+	}()
+	defer func() {
+		if x := recover(); x != nil {
+			err = fmt.Errorf("panic in run: %v\n%s", x, string(debug.Stack()))
+		}
+	}()
+	return t.run(ctx)
 }
 
 // Set is a collection of [Throttle] values indexed by key.

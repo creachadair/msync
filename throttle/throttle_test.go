@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creachadair/mds/value"
 	"github.com/creachadair/msync/throttle"
 	"github.com/fortytw2/leaktest"
 )
@@ -112,9 +113,17 @@ func TestThrottle(t *testing.T) {
 				return "ouch", fmt.Errorf("%d active callers", v)
 			}
 			t.Logf("Caller %d is running the task", id)
-			time.Sleep(5 * time.Microsecond)
-			return "OK", nil
+			select {
+			case <-ctx.Done():
+				t.Logf("Caller %d is cancelled", id)
+				return "", ctx.Err()
+			case <-time.After(5 * time.Microsecond):
+				return "OK", nil
+			}
 		})
+
+		dead, cancel := context.WithCancel(context.Background())
+		cancel() // N.B. immediately cancelled, not deferred
 
 		var next int
 		var wg sync.WaitGroup
@@ -122,13 +131,25 @@ func TestThrottle(t *testing.T) {
 			next++
 			id := next
 
+			// Arrange for some of the workers to be cancelled.
+			isCancel := id%7 == 0
+			ctx := value.Cond(isCancel, dead, context.Background())
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 
-				ctx := context.WithValue(context.Background(), idKey{}, id)
+				ctx := context.WithValue(ctx, idKey{}, id)
 				v, err := th.Call(ctx)
-				if v != "OK" || err != nil {
+				if errors.Is(err, context.Canceled) {
+					// The only workers that should report cancellation are those we
+					// arranged to be cancelled. In particular, one worker getting
+					// cancelled must not prevent others from getting a value, as
+					// long as some of them do survive.
+					if !isCancel {
+						t.Errorf("Call: unexpected error: %v", err)
+					}
+				} else if v != "OK" || err != nil {
 					t.Errorf("Call: got %q, %v, want OK, nil", v, err)
 				}
 			}()

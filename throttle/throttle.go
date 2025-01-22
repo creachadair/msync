@@ -84,8 +84,8 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 		}
 		t.μ.Lock()
 
-		// The previous caller did not determine a result.
-		// We should go back and retry (if our ctx is still alive).
+		// Reaching the previous caller ended without determining a result,
+		// before ctx ended. Try again.
 	}
 	defer t.μ.Unlock()
 

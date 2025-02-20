@@ -51,8 +51,8 @@ func (c *Cond) Set() {
 	}
 	if !c.closed {
 		close(c.ch)
+		c.closed = true
 	}
-	c.closed = true
 }
 
 // Reset resets the condition. If it was already inactive, Reset has no effect.

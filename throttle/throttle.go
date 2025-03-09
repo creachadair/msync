@@ -9,7 +9,8 @@ import (
 
 // A Throttle coalesces calls to a function so that all goroutines concurrently
 // executing [Throttle.Call] share the result of a single execution of the
-// function made by one of the participants.
+// function made by one of the participants. This behaviour is sometimes also
+// described as "single-flighting".
 //
 // A Throttle is initially idle. The first goroutine to execute [Throttle.Call]
 // on an idle throttle begins a new session. All goroutines that call the

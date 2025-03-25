@@ -13,15 +13,16 @@ import (
 // described as "single-flighting".
 //
 // A Throttle is initially idle. The first goroutine to execute [Throttle.Call]
-// on an idle throttle begins a new session. All goroutines that call the
-// throttle during an active session block until either:
+// on an idle throttle begins a new session and executes the function. All
+// other goroutines that call the throttle during an active session block until
+// either:
 //
-//   - The context governing that call ends, in which case it reports a zero
-//     value and the error that ended the context.
+//   - The context governing that goroutine's call ends, in which case it
+//     reports a zero value and the error that ended the context.
 //
-//   - The goroutine executing the throttled target function completes its call
-//     and reports a value and error, which is then shared among all the
-//     goroutines participating in the session.
+//   - The goroutine executing the throttled target function completes its
+//     execution of that function, and reports a value and error, which is then
+//     shared among all the goroutines participating in the session.
 //
 // If the execution of the throttled function ends because the context
 // governing its calling goroutine ended, another waiting goroutine (if any) is
@@ -30,10 +31,10 @@ import (
 // the next caller will begin a new session.
 //
 // Within a given session, it is possible the target function may partially
-// execute multiple times, if the goroutine doing so returns early due to
-// context termination. It will only be executed by a single goroutine at a
-// time, however; and if it completes before its context ends (even with an
-// error) it will not be executed again within the scope of that session.
+// execute multiple times, if a goroutine doing so returns early due to context
+// termination. The target function will only be executed by a single goroutine
+// at a time, however; and if it completes before its context ends (even with
+// an error) it will not be executed again within the scope of that session.
 type Throttle[T any] struct {
 	run Func[T] // read-only after initialization
 

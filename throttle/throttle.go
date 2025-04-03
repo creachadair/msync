@@ -95,11 +95,10 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 	// report some other error.
 	v, err := t.runProtectLocked(ctx)
 
-	// If run succeeded, or if it reported an error but our context has not
-	// yet ended (signifying the error is from the target function), then the
-	// result is determined.  Propagate it to any waiting tasks, and then
-	// return it.
-	if err == nil || ctx.Err() == nil {
+	// If our context has not yet ended (signifying any error is from the target
+	// function), then the result is determined.  Propagate it to any waiting
+	// tasks, and then return it.
+	if ctx.Err() == nil {
 		for _, w := range t.waits {
 			w <- result[T]{value: v, err: err}
 			close(w)

@@ -1,16 +1,17 @@
-// Package trigger implements an edge-triggered condition variable.
+// Package trigger implements channel-based condition variable.
 package trigger
 
 import "sync"
 
-// A Cond is an edge-triggered condition shared by multiple goroutines.  The
-// [Cond.Ready] method returns a channel that is closed when the condition is
-// activated.
+// A Cond is a condition shared by multiple goroutines.  The [Cond.Ready]
+// method returns a channel that is closed when the condition is activated.
 //
-// When a condition is first created it is inactive. It remains inactive until
+// When a condition is first created it is inactive. While inactive, reads on
+// the ready channel will block.  The condition remains inactive until
 // [Cond.Set] or [Cond.Signal] is called, either of which causes the current
-// ready channel to be closed. Once a condition has been activated, it remains
-// active until it is reset. Use [Cond.Reset] to make it inactive.
+// ready channel to be closed (and thus deliver a zero value). Once a condition
+// has been activated, it remains active until it is reset. Use [Cond.Reset] to
+// make it inactive again.
 //
 // The [Cond.Signal] method activates and then immediately resets the
 // condition, acting as Set and Reset done in a single step.

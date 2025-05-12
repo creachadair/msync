@@ -137,6 +137,22 @@ func TestValue(t *testing.T) {
 		}
 	})
 
+	// Verify that if a waiter gives up, updates do not block.
+	t.Run("GiveUp", func(t *testing.T) {
+		v := msync.NewValue("quince")
+		_ = v.Wait()
+		_ = v.Wait()
+
+		done := make(chan struct{})
+		go func() { v.Set("pluot"); close(done) }()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timed out waiting for Set")
+		}
+	})
+
 	// Verify that Wait gets the value of a concurrent Set.
 	t.Run("Concur", func(t *testing.T) {
 		ch := v.Wait()

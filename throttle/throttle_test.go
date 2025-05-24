@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creachadair/mds/mtest"
 	"github.com/creachadair/mds/value"
 	"github.com/creachadair/msync/throttle"
 	"github.com/fortytw2/leaktest"
@@ -280,4 +281,50 @@ func TestRaces(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestAdapt(t *testing.T) {
+	testErr := errors.New("test error")
+
+	t.Run("ErrOnly", func(t *testing.T) {
+		v, err := throttle.Adapt[any](func() error { return testErr })(t.Context())
+		if v != nil || err != testErr {
+			t.Fatalf("Got %v, %v; want nil, %v", v, err, testErr)
+		}
+	})
+	t.Run("CtxErrOnly", func(t *testing.T) {
+		v, err := throttle.Adapt[any](func(ctx context.Context) error { return testErr })(t.Context())
+		if v != nil || err != testErr {
+			t.Fatalf("Got %v, %v; want nil, %v", v, err, testErr)
+		}
+	})
+	t.Run("ValOnly", func(t *testing.T) {
+		v, err := throttle.Adapt[int](func() int { return 25 })(t.Context())
+		if v != 25 || err != nil {
+			t.Fatalf("Got %d, %v; want 25, nil", v, err)
+		}
+	})
+	t.Run("CtxValOnly", func(t *testing.T) {
+		v, err := throttle.Adapt[int](func(context.Context) int { return 25 })(t.Context())
+		if v != 25 || err != nil {
+			t.Fatalf("Got %d, %v; want 25, nil", v, err)
+		}
+	})
+	t.Run("ValError", func(t *testing.T) {
+		v, err := throttle.Adapt[int](func() (int, error) { return 25, nil })(t.Context())
+		if v != 25 || err != nil {
+			t.Fatalf("Got %d, %v; want 25, nil", v, err)
+		}
+	})
+	t.Run("CtxValError", func(t *testing.T) {
+		v, err := throttle.Adapt[int](func(context.Context) (int, error) { return 25, nil })(t.Context())
+		if v != 25 || err != nil {
+			t.Fatalf("Got %d, %v; want 25, nil", v, err)
+		}
+	})
+	t.Run("Invalid", func(t *testing.T) {
+		for _, tc := range []any{"string", 25, func() {}, func(int) {}} {
+			mtest.MustPanicf(t, func() { throttle.Adapt[any](tc) }, "expected Adapt to panic for %T", tc)
+		}
+	})
 }

@@ -4,8 +4,55 @@ package throttle
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
+
+// Adapt converts a function with a compatible signature to a [Func].
+// The concrete value of fn must be a function with one of the following
+// type schemes:
+//
+//	func() error
+//	func(context.Context) error
+//	func() T
+//	func(context.Context) T
+//	func() (T, error)
+//	func(context.Context) (T, error)
+//
+// If fn is not a function or does not have one of these forms, Adapt panics.
+// If fn is already a Func[T], it is returned unmodified.
+func Adapt[T any](fn any) Func[T] {
+	switch f := fn.(type) {
+	case Func[T]:
+		return f
+	case func() error:
+		return func(context.Context) (T, error) {
+			var zero T
+			return zero, f()
+		}
+	case func(context.Context) error:
+		return func(ctx context.Context) (T, error) {
+			var zero T
+			return zero, f(ctx)
+		}
+	case func() T:
+		return func(ctx context.Context) (T, error) {
+			return f(), nil
+		}
+	case func(ctx context.Context) T:
+		return func(ctx context.Context) (T, error) {
+			return f(ctx), nil
+		}
+	case func() (T, error):
+		return func(context.Context) (T, error) {
+			return f()
+		}
+	case func(ctx context.Context) (T, error):
+		return f
+	default:
+		panic(fmt.Sprintf("unsupported type %T", fn))
+	}
+}
 
 // A Throttle coalesces calls to a function so that all goroutines concurrently
 // executing [Throttle.Call] share the result of a single execution of the

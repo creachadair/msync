@@ -3,7 +3,7 @@ module github.com/creachadair/msync
 go 1.23
 
 require (
-	github.com/creachadair/mds v0.24.3
+	github.com/creachadair/mds v0.25.0
 	github.com/fortytw2/leaktest v1.3.0
 )
 

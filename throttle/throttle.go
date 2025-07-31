@@ -12,6 +12,8 @@ import (
 // The concrete value of fn must be a function with one of the following
 // type schemes:
 //
+//	func()
+//	func(context.Context)
 //	func() error
 //	func(context.Context) error
 //	func() T
@@ -21,18 +23,29 @@ import (
 //
 // If fn is not a function or does not have one of these forms, Adapt panics.
 // If fn is already a Func[T], it is returned unmodified.
+// Wrapped function types with no error result report a nil error.
+// Wrapped function types with no value result report a zero value.
 func Adapt[T any](fn any) Func[T] {
+	var zero T
 	switch f := fn.(type) {
 	case Func[T]:
 		return f
+	case func():
+		return func(context.Context) (T, error) {
+			f()
+			return zero, nil
+		}
+	case func(context.Context):
+		return func(ctx context.Context) (T, error) {
+			f(ctx)
+			return zero, nil
+		}
 	case func() error:
 		return func(context.Context) (T, error) {
-			var zero T
 			return zero, f()
 		}
 	case func(context.Context) error:
 		return func(ctx context.Context) (T, error) {
-			var zero T
 			return zero, f(ctx)
 		}
 	case func() T:

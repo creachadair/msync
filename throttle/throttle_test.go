@@ -286,6 +286,18 @@ func TestRaces(t *testing.T) {
 func TestAdapt(t *testing.T) {
 	testErr := errors.New("test error")
 
+	t.Run("Thunk", func(t *testing.T) {
+		v, err := throttle.Adapt[int](func() {})(t.Context())
+		if v != 0 || err != nil {
+			t.Errorf("Got %v, %v; want 0, nil", v, err)
+		}
+	})
+	t.Run("CtxThunk", func(t *testing.T) {
+		v, err := throttle.Adapt[bool](func(context.Context) {})(t.Context())
+		if v != false || err != nil {
+			t.Errorf("Got %v, %v; want false, nil", v, err)
+		}
+	})
 	t.Run("ErrOnly", func(t *testing.T) {
 		v, err := throttle.Adapt[any](func() error { return testErr })(t.Context())
 		if v != nil || err != testErr {
@@ -323,7 +335,7 @@ func TestAdapt(t *testing.T) {
 		}
 	})
 	t.Run("Invalid", func(t *testing.T) {
-		for _, tc := range []any{"string", 25, func() {}, func(int) {}} {
+		for _, tc := range []any{"string", 25, func(int) {}, func(byte) byte { return 0 }} {
 			mtest.MustPanicf(t, func() { throttle.Adapt[any](tc) }, "expected Adapt to panic for %T", tc)
 		}
 	})

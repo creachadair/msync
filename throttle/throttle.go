@@ -25,42 +25,42 @@ import (
 // If fn is already a Func[T], it is returned unmodified.
 // Wrapped function types with no error result report a nil error.
 // Wrapped function types with no value result report a zero value.
-func Adapt[T any](fn any) Func[T] {
-	var zero T
+func Adapt[V any](fn any) Func[V] {
+	var zero V
 	switch f := fn.(type) {
-	case Func[T]:
+	case Func[V]:
 		return f
 	case func():
-		return func(context.Context) (T, error) {
+		return func(context.Context) (V, error) {
 			f()
 			return zero, nil
 		}
 	case func(context.Context):
-		return func(ctx context.Context) (T, error) {
+		return func(ctx context.Context) (V, error) {
 			f(ctx)
 			return zero, nil
 		}
 	case func() error:
-		return func(context.Context) (T, error) {
+		return func(context.Context) (V, error) {
 			return zero, f()
 		}
 	case func(context.Context) error:
-		return func(ctx context.Context) (T, error) {
+		return func(ctx context.Context) (V, error) {
 			return zero, f(ctx)
 		}
-	case func() T:
-		return func(ctx context.Context) (T, error) {
+	case func() V:
+		return func(ctx context.Context) (V, error) {
 			return f(), nil
 		}
-	case func(ctx context.Context) T:
-		return func(ctx context.Context) (T, error) {
+	case func(ctx context.Context) V:
+		return func(ctx context.Context) (V, error) {
 			return f(ctx), nil
 		}
-	case func() (T, error):
-		return func(context.Context) (T, error) {
+	case func() (V, error):
+		return func(context.Context) (V, error) {
 			return f()
 		}
-	case func(ctx context.Context) (T, error):
+	case func(ctx context.Context) (V, error):
 		return f
 	default:
 		panic(fmt.Sprintf("unsupported type %T", fn))
@@ -73,63 +73,63 @@ func Adapt[T any](fn any) Func[T] {
 // described as "single-flighting".
 //
 // A Throttle is initially idle. The first goroutine to execute [Throttle.Call]
-// on an idle throttle begins a new session and executes the function. All
+// on an idle throttle begins a new session and executes its function. All
 // other goroutines that call the throttle during an active session block until
 // either:
 //
 //   - The context governing that goroutine's call ends, in which case it
 //     reports a zero value and the error that ended the context.
 //
-//   - The goroutine executing the throttled target function completes its
-//     execution of that function, and reports a value and error, which is then
-//     shared among all the goroutines participating in the session.
+//   - The goroutine leading the session completes its execution of its
+//     function, and reports a value and error, which is then shared among all
+//     the goroutines participating in the session.
 //
 // If the execution of the throttled function ends because the context
 // governing its calling goroutine ended, another waiting goroutine (if any) is
-// woken up and given an oppoartunity to call the throttled function.  Once all
-// concurrent goroutines have returned, the throttle is once again idle, and
-// the next caller will begin a new session.
+// woken up and given an oppoartunity to use the throttle.  Once all concurrent
+// goroutines have returned, the throttle is once again idle, and the next
+// caller will begin a new session.
 //
-// Within a given session, it is possible the target function may partially
-// execute multiple times, if a goroutine doing so returns early due to context
-// termination. The target function will only be executed by a single goroutine
-// at a time, however; and if it completes before its context ends (even with
-// an error) it will not be executed again within the scope of that session.
-type Throttle[T any] struct {
-	run Func[T] // read-only after initialization
-
+// Within a given session, it is possible a target function partially executes
+// multiple times, if a goroutine leading the session returns early due to its
+// context ending. A function will only be executed by a single goroutine at a
+// time, however; and if it completes before its context ends (even with an
+// error) it will not be executed again within the scope of that session.
+//
+// A zero Throttle is ready for use, but must not be copied after first use.
+type Throttle[V any] struct {
 	μ      sync.Mutex
-	waits  []chan result[T]
+	waits  []chan result[V]
 	active bool
 }
 
-type result[T any] struct {
-	value T
+type result[V any] struct {
+	value V
 	err   error
 }
 
-// Func is an alias for a function that can be managed by a [Throttle].
-type Func[T any] func(context.Context) (T, error)
+// Func is a function that can be managed by a [T].
+type Func[V any] func(context.Context) (V, error)
 
-// New constructs a new [Throttle] that executes run.
-func New[T any](run Func[T]) *Throttle[T] { return &Throttle[T]{run: run} }
+// New constructs a new empty [Throttle].
+func New[V any]() *Throttle[V] { return new(Throttle[V]) }
 
-// Call invokes the function guarded by t. Call is safe for concurrent use by
-// multiple goroutines.
+// Call invokes run guarded by t. Call is safe for concurrent use by multiple
+// goroutines.
 //
 // If ctx ends before a value is resolved, Call returns a zero value and the
 // context error. Otherwise, it returns the value and error from calling the
 // underlying function, resolved by whichever goroutine successfully completed
 // the call.
-func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
-	var zero T
+func (t *Throttle[V]) Call(ctx context.Context, run Func[V]) (V, error) {
+	var zero V
 
 	t.μ.Lock()
 	for t.active {
 		// Someone is already working on the call, wait for them.
 		// N.B. buffer the channel so that if a waiter gives up, a successful
 		// call will not stall waiting for a receive.
-		ready := make(chan result[T], 1)
+		ready := make(chan result[V], 1)
 		t.waits = append(t.waits, ready)
 
 		t.μ.Unlock()
@@ -153,14 +153,14 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 
 	// Attempt to determine the result. This may fail if ctx ends, or may
 	// report some other error.
-	v, err := t.runProtectLocked(ctx)
+	v, err := t.runProtectLocked(ctx, run)
 
 	// If our context has not yet ended (signifying any error is from the target
 	// function), then the result is determined.  Propagate it to any waiting
 	// tasks, and then return it.
 	if ctx.Err() == nil {
 		for _, w := range t.waits {
-			w <- result[T]{value: v, err: err}
+			w <- result[V]{value: v, err: err}
 			close(w)
 		}
 		t.waits = nil
@@ -180,43 +180,48 @@ func (t *Throttle[T]) Call(ctx context.Context) (T, error) {
 
 // runProtectLocked calls t.run(ctx) outside the lock, and reports its result.
 // The caller must hold t.μ.
-func (t *Throttle[T]) runProtectLocked(ctx context.Context) (_ T, err error) {
+func (t *Throttle[V]) runProtectLocked(ctx context.Context, run Func[V]) (_ V, err error) {
 	t.active = true
 	t.μ.Unlock() // release the lock while running
 	defer func() {
 		t.μ.Lock()
 		t.active = false // N.B. after re-acquire
 	}()
-	return t.run(ctx)
+	return run(ctx)
 }
 
-// Set is a collection of [Throttle] values indexed by key.
-// A zero value is ready for use, but must not be copied after first use.
-type Set[Key comparable, T any] struct {
-	μ        sync.Mutex // protects throttle
-	throttle map[Key]*Throttle[T]
+// Set is a collection of [T] values indexed by key.  A zero value is ready for
+// use, but must not be copied after first use.
+type Set[Key comparable, V any] struct {
+	μ     sync.Mutex // protects throttle
+	entry map[Key]*setEntry[V]
+}
+
+type setEntry[V any] struct {
+	run      Func[V]
+	throttle Throttle[V]
 }
 
 // NewSet constructs a new empty [Set].
-func NewSet[Key comparable, T any]() *Set[Key, T] { return new(Set[Key, T]) }
+func NewSet[Key comparable, V any]() *Set[Key, V] { return new(Set[Key, V]) }
 
 // Call calls the throttle associated with key, constructing a new one if
 // necessary. Call is safe for use by multiple concurrent goroutines.
 //
-// All concurrent callers of Call with a given key share a single [Throttle].
-func (s *Set[Key, T]) Call(ctx context.Context, key Key, run Func[T]) (T, error) {
-	tkey := func() *Throttle[T] {
+// All concurrent callers of Call with a given key share a single [T].
+func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error) {
+	ekey := func() *setEntry[V] {
 		s.μ.Lock()
 		defer s.μ.Unlock()
-		tkey, ok := s.throttle[key]
+		e, ok := s.entry[key]
 		if !ok {
-			if s.throttle == nil {
-				s.throttle = make(map[Key]*Throttle[T])
+			if s.entry == nil {
+				s.entry = make(map[Key]*setEntry[V])
 			}
-			tkey = New(run)
-			s.throttle[key] = tkey
+			e = &setEntry[V]{run: run}
+			s.entry[key] = e
 		}
-		return tkey
+		return e
 	}()
 	defer func() {
 		s.μ.Lock()
@@ -231,9 +236,9 @@ func (s *Set[Key, T]) Call(ctx context.Context, key Key, run Func[T]) (T, error)
 		//
 		// Note that we don't have to handle a panic here, as Throttle.Call has
 		// already converted a panic in the run function into an error.
-		if s.throttle[key] == tkey {
-			delete(s.throttle, key)
+		if s.entry[key] == ekey {
+			delete(s.entry, key)
 		}
 	}()
-	return tkey.Call(ctx)
+	return ekey.throttle.Call(ctx, ekey.run)
 }

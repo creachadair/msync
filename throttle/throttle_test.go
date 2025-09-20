@@ -16,28 +16,31 @@ import (
 	"github.com/fortytw2/leaktest"
 )
 
-func TestThrottle(t *testing.T) {
+func TestT(t *testing.T) {
 	defer leaktest.Check(t)()
 
 	t.Run("Basic", func(t *testing.T) {
-		th := throttle.New(func(context.Context) (int, error) {
-			return 12345, nil
-		})
+		var th throttle.Throttle[int]
+
 		for range 3 {
-			if v, err := th.Call(context.Background()); v != 12345 || err != nil {
+			v, err := th.Call(t.Context(), func(context.Context) (int, error) {
+				return 12345, nil
+			})
+			if v != 12345 || err != nil {
 				t.Errorf("Call: got %v, %v; want 12345, nil", v, err)
 			}
 		}
 	})
 
 	t.Run("Cancelled", func(t *testing.T) {
-		th := throttle.New(func(context.Context) (int, error) {
-			return -1, errors.New("not seen")
-		})
-		dead, cancel := context.WithCancel(context.Background())
+		var th throttle.Throttle[int]
+
+		dead, cancel := context.WithCancel(t.Context())
 		cancel() // N.B. before starting (that is what we're testing)
 
-		v, err := th.Call(dead)
+		v, err := th.Call(dead, func(context.Context) (int, error) {
+			return -1, errors.New("not seen")
+		})
 		if v != 0 || !errors.Is(err, context.Canceled) {
 			t.Errorf("Got %v, %v, want 0, %v", v, err, context.Canceled)
 		}
@@ -47,26 +50,29 @@ func TestThrottle(t *testing.T) {
 	const longTime = 5 * shortTime
 
 	t.Run("Slow", func(t *testing.T) {
-		th := throttle.New(func(ctx context.Context) (int, error) {
+		var th throttle.Throttle[int]
+
+		f := func(ctx context.Context) (int, error) {
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
 			case <-time.After(longTime):
 				return 12345, nil
 			}
-		})
+		}
 
 		t.Run("Fail", func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), shortTime)
+			ctx, cancel := context.WithTimeout(t.Context(), shortTime)
 			defer cancel()
 
-			got, err := th.Call(ctx)
+			got, err := th.Call(ctx, f)
 			if got != 0 || !errors.Is(err, context.DeadlineExceeded) {
 				t.Errorf("Call: got %v, %v; want 0, %v", got, err, context.DeadlineExceeded)
 			}
 		})
+
 		t.Run("OK", func(t *testing.T) {
-			got, err := th.Call(context.Background())
+			got, err := th.Call(t.Context(), f)
 			if got != 12345 || err != nil {
 				t.Errorf("Call: got %v, %v; want 12345, nil", got, err)
 			}
@@ -74,24 +80,26 @@ func TestThrottle(t *testing.T) {
 	})
 
 	t.Run("AllGiveUp", func(t *testing.T) {
+		var th throttle.Throttle[bool]
+
 		done := make(chan struct{})
-		th := throttle.New(func(ctx context.Context) (bool, error) {
+		f := func(ctx context.Context) (bool, error) {
 			select {
 			case <-ctx.Done():
 				return false, ctx.Err()
 			case <-done:
 				return true, nil
 			}
-		})
+		}
 
 		var wg sync.WaitGroup
 		for range 5 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(context.Background(), rand.N(5*time.Millisecond))
+				ctx, cancel := context.WithTimeout(t.Context(), rand.N(5*time.Millisecond))
 				defer cancel()
-				v, err := th.Call(ctx)
+				v, err := th.Call(ctx, f)
 				if v || err == nil {
 					t.Errorf("Call: got (%v, %v), want (false, error)", v, err)
 				}
@@ -102,10 +110,11 @@ func TestThrottle(t *testing.T) {
 	})
 
 	t.Run("Many", func(t *testing.T) {
-		type idKey struct{}
+		var th throttle.Throttle[string]
 
+		type idKey struct{}
 		var active atomic.Int32
-		th := throttle.New(func(ctx context.Context) (string, error) {
+		f := func(ctx context.Context) (string, error) {
 			id := ctx.Value(idKey{}).(int)
 
 			v := active.Add(1)
@@ -121,9 +130,9 @@ func TestThrottle(t *testing.T) {
 			case <-time.After(5 * time.Microsecond):
 				return "OK", nil
 			}
-		})
+		}
 
-		dead, cancel := context.WithCancel(context.Background())
+		dead, cancel := context.WithCancel(t.Context())
 		cancel() // N.B. immediately cancelled, not deferred
 
 		var next int
@@ -134,14 +143,14 @@ func TestThrottle(t *testing.T) {
 
 			// Arrange for some of the workers to be cancelled.
 			isCancel := id%7 == 0
-			ctx := value.Cond(isCancel, dead, context.Background())
+			ctx := value.Cond(isCancel, dead, t.Context())
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 
 				ctx := context.WithValue(ctx, idKey{}, id)
-				v, err := th.Call(ctx)
+				v, err := th.Call(ctx, f)
 				if errors.Is(err, context.Canceled) {
 					// The only workers that should report cancellation are those we
 					// arranged to be cancelled. In particular, one worker getting
@@ -165,7 +174,7 @@ func TestThrottle(t *testing.T) {
 
 func TestSet(t *testing.T) {
 	var tset throttle.Set[string, int]
-	ctx := context.Background()
+	ctx := t.Context()
 
 	slowRandom := func(context.Context) (int, error) {
 		// Wait long enough that it is "sufficiently likely" all our probe calls
@@ -243,14 +252,15 @@ func TestRaces(t *testing.T) {
 	}
 	var write throttle.Set[int, int]
 
-	sum := throttle.New(func(context.Context) (sum int, _ error) {
+	var th throttle.Throttle[int]
+	sum := func(context.Context) (sum int, _ error) {
 		data.RLock()
 		defer data.RUnlock()
 		for _, v := range data.v {
 			sum += v
 		}
 		return
-	})
+	}
 
 	// Run several goroutines in parallel contending for access to the throttles
 	// managed by write and sum. This gives the race and deadlock detectors
@@ -258,7 +268,7 @@ func TestRaces(t *testing.T) {
 	const numTasks = 32
 	const numOps = 200
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var wg sync.WaitGroup
 	for range numTasks {
 		wg.Add(1)
@@ -274,7 +284,7 @@ func TestRaces(t *testing.T) {
 					pos := rand.N(n)
 					write.Call(ctx, pos, write1(pos, rand.N(200000)))
 				case 1:
-					sum.Call(ctx)
+					th.Call(ctx, sum)
 				}
 				rnd >>= 1
 			}

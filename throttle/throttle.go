@@ -111,7 +111,7 @@ type result[V any] struct {
 // Func is a function that can be managed by a [Throttle].
 type Func[V any] func(context.Context) (V, error)
 
-// New constructs a new empty [Throttle].
+// New constructs a new idle [Throttle].
 func New[V any]() *Throttle[V] { return new(Throttle[V]) }
 
 // Call invokes run guarded by t. Call is safe for concurrent use by multiple

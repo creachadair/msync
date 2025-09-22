@@ -22,7 +22,7 @@ import (
 //	func(context.Context) (T, error)
 //
 // If fn is not a function or does not have one of these forms, Adapt panics.
-// If fn is already a Func[T], it is returned unmodified.
+// If fn is already a Func[V], it is returned unmodified.
 // Wrapped function types with no error result report a nil error.
 // Wrapped function types with no value result report a zero value.
 func Adapt[V any](fn any) Func[V] {
@@ -108,7 +108,7 @@ type result[V any] struct {
 	err   error
 }
 
-// Func is a function that can be managed by a [T].
+// Func is a function that can be managed by a [Throttle].
 type Func[V any] func(context.Context) (V, error)
 
 // New constructs a new empty [Throttle].
@@ -190,8 +190,8 @@ func (t *Throttle[V]) runProtectLocked(ctx context.Context, run Func[V]) (_ V, e
 	return run(ctx)
 }
 
-// Set is a collection of [T] values indexed by key.  A zero value is ready for
-// use, but must not be copied after first use.
+// Set is a collection of [Throttle] values indexed by key.  A zero value is
+// ready for use, but must not be copied after first use.
 type Set[Key comparable, V any] struct {
 	μ     sync.Mutex // protects throttle
 	entry map[Key]*setEntry[V]
@@ -208,7 +208,7 @@ func NewSet[Key comparable, V any]() *Set[Key, V] { return new(Set[Key, V]) }
 // Call calls the throttle associated with key, constructing a new one if
 // necessary. Call is safe for use by multiple concurrent goroutines.
 //
-// All concurrent callers of Call with a given key share a single [T].
+// All concurrent callers of Call with a given key share a single [Throttle].
 func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error) {
 	ekey := func() *setEntry[V] {
 		s.μ.Lock()

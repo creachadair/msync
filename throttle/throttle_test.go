@@ -16,7 +16,7 @@ import (
 	"github.com/fortytw2/leaktest"
 )
 
-func TestT(t *testing.T) {
+func TestThrottle(t *testing.T) {
 	defer leaktest.Check(t)()
 
 	t.Run("Basic", func(t *testing.T) {

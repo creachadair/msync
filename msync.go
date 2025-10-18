@@ -79,25 +79,30 @@ func (v *Value[T]) LoadLink(lv *Linked[T]) *Linked[T] {
 }
 
 // Linked is a snapshot of a Value acquired by a call to its LoadLink method.
+// Use [Linked.Get] to obtain the captured value.  The captured value is fixed,
+// and does not change if the underlying Value is updated separately.
 //
-// A linked snapshot may be "valid" or "invalid". It is "valid" if a call to
-// its StoreCond method could succeed at some point in the future; otherwise it
+// A linked snapshot is either "valid" or "invalid". It is "valid" if a call to
+// [Linked.StoreCond] could succeed at some point in the future; otherwise it
 // is "invalid". A valid snapshot may become invalid, but an invalid snapshot
-// is permanently so.
+// is permanently so. See also: [Linked.Validate].
 type Linked[T any] struct {
 	v    *Value[T] // the base Value
 	snap T         // the snapshotted value
 	gen  uint64    // the generation at the time of link
 }
 
-// Get returns the current contents of the snapshot.
+// Get returns the value captured in the snapshot.
 func (lv *Linked[T]) Get() T { return lv.snap }
 
 // StoreCond attempts to update the linked Value with v, and reports whether
-// doing so succeeded. Once StoreCond has been called, lv is invalid.
+// the update succeeded. An update succeeds if no successful StoreCond or Set
+// operation has been applied to the linked Value since the [Value.LoadLink]
+// that initialized lv.
 //
-// StoreCond succeeds if no successful StoreCond or Set operation has been
-// applied to the underlying Value since the LoadLink that initialized lv.
+// Once StoreCond has been called, whether successful or not, lv is forever
+// invalid (until re-linked).  If it succeeded, the Get method returns the
+// updated value.
 func (lv *Linked[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
@@ -112,7 +117,8 @@ func (lv *Linked[T]) StoreCond(v T) bool {
 // Validate reports whether a call to StoreCond would have succeeded given the
 // current state of lv. When Validate reports true, it means lv was valid at
 // the time of the call; it may have become invalid by the time the caller
-// receives the result. If Validate reports false, lv is forever invalid.
+// receives the result. If Validate reports false, lv is forever invalid (until
+// re-linked).
 func (lv *Linked[T]) Validate() bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

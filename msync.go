@@ -66,11 +66,11 @@ func (v *Value[T]) Wait() <-chan T {
 }
 
 // LoadLink links a view of the current value of v.
-// If lv == nil, a new linked value is allocated and returned.
+// If lv == nil, a new link is allocated and returned.
 // Otherwise, the contents of *lv are replaced and lv is returned.
-func (v *Value[T]) LoadLink(lv *Linked[T]) *Linked[T] {
+func (v *Value[T]) LoadLink(lv *Link[T]) *Link[T] {
 	if lv == nil {
-		lv = new(Linked[T])
+		lv = new(Link[T])
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -78,7 +78,7 @@ func (v *Value[T]) LoadLink(lv *Linked[T]) *Linked[T] {
 	return lv
 }
 
-// Linked is a snapshot of a Value acquired by a call to its LoadLink method.
+// Link is a snapshot of a Value acquired by a call to its LoadLink method.
 // Use [Linked.Get] to obtain the captured value.  The captured value is fixed,
 // and does not change if the underlying Value is updated separately.
 //
@@ -86,14 +86,14 @@ func (v *Value[T]) LoadLink(lv *Linked[T]) *Linked[T] {
 // [Linked.StoreCond] could succeed at some point in the future; otherwise it
 // is "invalid". A valid snapshot may become invalid, but an invalid snapshot
 // is permanently so. See also: [Linked.Validate].
-type Linked[T any] struct {
+type Link[T any] struct {
 	v    *Value[T] // the base Value
 	snap T         // the snapshotted value
 	gen  uint64    // the generation at the time of link
 }
 
 // Get returns the value captured in the snapshot.
-func (lv *Linked[T]) Get() T { return lv.snap }
+func (lv *Link[T]) Get() T { return lv.snap }
 
 // StoreCond attempts to update the linked Value with v, and reports whether
 // the update succeeded. An update succeeds if no successful StoreCond or Set
@@ -103,7 +103,7 @@ func (lv *Linked[T]) Get() T { return lv.snap }
 // Once StoreCond has been called, whether successful or not, lv is forever
 // invalid (until re-linked).  If it succeeded, the Get method returns the
 // updated value.
-func (lv *Linked[T]) StoreCond(v T) bool {
+func (lv *Link[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
 	if lv.v.gen == lv.gen {
@@ -119,7 +119,7 @@ func (lv *Linked[T]) StoreCond(v T) bool {
 // the time of the call; it may have become invalid by the time the caller
 // receives the result. If Validate reports false, lv is forever invalid (until
 // re-linked).
-func (lv *Linked[T]) Validate() bool {
+func (lv *Link[T]) Validate() bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
 	return lv.v.gen == lv.gen

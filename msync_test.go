@@ -226,7 +226,7 @@ func TestValue_llsc(t *testing.T) {
 
 		func() {
 			t.Log("Fail/StoreCond")
-			var v1, v2 msync.Linked[int]
+			var v1, v2 msync.Link[int]
 
 			s1 := v.LoadLink(&v1)
 			s2 := v.LoadLink(&v2)

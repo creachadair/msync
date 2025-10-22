@@ -2,10 +2,7 @@ module github.com/creachadair/msync
 
 go 1.25
 
-require (
-	github.com/creachadair/mds v0.25.6
-	github.com/fortytw2/leaktest v1.3.0
-)
+require github.com/creachadair/mds v0.25.6
 
 require (
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect

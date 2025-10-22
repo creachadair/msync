@@ -1,6 +1,6 @@
 module github.com/creachadair/msync
 
-go 1.24
+go 1.25
 
 require (
 	github.com/creachadair/mds v0.25.6

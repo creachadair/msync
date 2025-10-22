@@ -79,13 +79,13 @@ func (v *Value[T]) LoadLink(lv *Link[T]) *Link[T] {
 }
 
 // Link is a snapshot of a Value acquired by a call to its LoadLink method.
-// Use [Linked.Get] to obtain the captured value.  The captured value is fixed,
+// Use [Link.Get] to obtain the captured value.  The captured value is fixed,
 // and does not change if the underlying Value is updated separately.
 //
 // A linked snapshot is either "valid" or "invalid". It is "valid" if a call to
-// [Linked.StoreCond] could succeed at some point in the future; otherwise it
-// is "invalid". A valid snapshot may become invalid, but an invalid snapshot
-// is permanently so. See also: [Linked.Validate].
+// [Link.StoreCond] could succeed at some point in the future; otherwise it is
+// "invalid". A valid snapshot may become invalid, but an invalid snapshot is
+// permanently so. See also: [Link.Validate].
 type Link[T any] struct {
 	v    *Value[T] // the base Value
 	snap T         // the snapshotted value

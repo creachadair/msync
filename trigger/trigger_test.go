@@ -4,7 +4,6 @@ import (
 	"sync"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	"github.com/creachadair/msync/trigger"
 )
@@ -28,7 +27,7 @@ func checkActive(t *testing.T, tr *trigger.Cond, msg string, args ...any) {
 	}
 }
 
-func TestTrigger(t *testing.T) {
+func TestCond(t *testing.T) {
 	t.Run("Signal", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			// Start up a bunch of tasks that listen to a trigger, signal the trigger,
@@ -84,12 +83,7 @@ func TestTrigger(t *testing.T) {
 			tr.Set()
 			checkActive(t, tr, "OK, set trigger is active")
 			tr.Set() // safe to do it multiple times
-			for i := range 3 {
-				time.Sleep(time.Millisecond)
-				checkActive(t, tr, "OK, set trigger is still active (check %d)", i+1)
-			}
-
-			synctest.Wait()
+			checkActive(t, tr, "OK, set trigger is still active")
 
 			tr.Reset()
 			checkNotActive(t, tr)

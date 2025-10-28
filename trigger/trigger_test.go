@@ -9,28 +9,28 @@ import (
 	"github.com/creachadair/msync/trigger"
 )
 
-func TestTrigger(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		checkNotActive := func(t *testing.T, tr *trigger.Cond) {
-			t.Helper()
-			select {
-			case <-tr.Ready():
-				t.Error("Trigger is active when it should not be")
-			default:
-			}
-		}
-		checkActive := func(t *testing.T, tr *trigger.Cond, msg string, args ...any) {
-			t.Helper()
-			select {
-			case <-tr.Ready():
-				t.Logf(msg, args...)
-			default:
-				t.Error("Trigger is not ready when it should be")
-			}
-		}
+func checkNotActive(t *testing.T, tr *trigger.Cond) {
+	t.Helper()
+	select {
+	case <-tr.Ready():
+		t.Error("Trigger is active when it should not be")
+	default:
+	}
+}
 
-		func() {
-			t.Log("Signal")
+func checkActive(t *testing.T, tr *trigger.Cond, msg string, args ...any) {
+	t.Helper()
+	select {
+	case <-tr.Ready():
+		t.Logf(msg, args...)
+	default:
+		t.Error("Trigger is not ready when it should be")
+	}
+}
+
+func TestTrigger(t *testing.T) {
+	t.Run("Signal", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
 			// Start up a bunch of tasks that listen to a trigger, signal the trigger,
 			// and verify that it woke them all up.
 			tr := trigger.New()
@@ -64,10 +64,11 @@ func TestTrigger(t *testing.T) {
 					t.Errorf("Task %d did not report success", i+1)
 				}
 			}
-		}()
+		})
+	})
 
-		func() {
-			t.Log("Set")
+	t.Run("Set", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
 			tr := trigger.New()
 			checkNotActive(t, tr)
 
@@ -94,6 +95,6 @@ func TestTrigger(t *testing.T) {
 			checkNotActive(t, tr)
 			tr.Reset() // safe to do it multiple times
 			checkNotActive(t, tr)
-		}()
+		})
 	})
 }

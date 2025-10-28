@@ -67,7 +67,7 @@ func (c *Cond) Reset() {
 	}
 }
 
-// Ready returns a channel that is closed when t is activated.  If t is active
+// Ready returns a channel that is closed when c is activated.  If c is active
 // when Ready is called, the returned channel will already be closed.
 func (c *Cond) Ready() <-chan struct{} {
 	c.μ.Lock()

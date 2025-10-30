@@ -10,8 +10,12 @@ import (
 
 func checkNotActive(t *testing.T, tr *trigger.Cond) {
 	t.Helper()
+	ch := tr.Ready()
+	if ch == nil {
+		t.Error("Ready channel is nil")
+	}
 	select {
-	case <-tr.Ready():
+	case <-ch:
 		t.Error("Trigger is active when it should not be")
 	default:
 	}
@@ -19,8 +23,12 @@ func checkNotActive(t *testing.T, tr *trigger.Cond) {
 
 func checkActive(t *testing.T, tr *trigger.Cond, msg string, args ...any) {
 	t.Helper()
+	ch := tr.Ready()
+	if ch == nil {
+		t.Error("Ready channel is nil")
+	}
 	select {
-	case <-tr.Ready():
+	case <-ch:
 		t.Logf(msg, args...)
 	default:
 		t.Error("Trigger is not ready when it should be")
@@ -81,6 +89,8 @@ func TestCond(t *testing.T) {
 			synctest.Wait()
 
 			tr.Set()
+			synctest.Wait() // observer is done
+
 			checkActive(t, tr, "OK, set trigger is active")
 			tr.Set() // safe to do it multiple times
 			checkActive(t, tr, "OK, set trigger is still active")

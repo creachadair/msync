@@ -38,7 +38,7 @@ func (c *Cond) Signal() {
 	if c.ch != nil && !c.closed {
 		close(c.ch) // wake any pending waiters
 	}
-	c.ch = make(chan struct{})
+	c.ch = nil
 	c.closed = false
 }
 

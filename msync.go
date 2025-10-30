@@ -49,9 +49,11 @@ func (v *Value[T]) Get() T {
 	return v.x
 }
 
-// Wait returns a new channel that blocks until the value of v changes, then
-// delivers the current value of v. Each call to Wait returns a new channel.
-// Once a value has been delivered to the channel, it is closed.
+// Wait returns a new channel that blocks until the value of v is set via
+// [Value.Set] or [Link.StoreCond] (even if the new value is the same as the
+// previous one), then delivers the current value of v. Each call to Wait
+// returns a new channel.  Once a value has been delivered to the channel, it
+// is closed.
 //
 // If multiple goroutines set v concurrently, the channel will deliver the
 // value from one of them, but not necessarily the first.

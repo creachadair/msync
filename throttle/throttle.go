@@ -16,10 +16,10 @@ import (
 //	func(context.Context)
 //	func() error
 //	func(context.Context) error
-//	func() T
-//	func(context.Context) T
-//	func() (T, error)
-//	func(context.Context) (T, error)
+//	func() V
+//	func(context.Context) V
+//	func() (V, error)
+//	func(context.Context) (V, error)
 //
 // If fn is not a function or does not have one of these forms, Adapt panics.
 // If fn is already a Func[V], it is returned unmodified.

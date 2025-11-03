@@ -9,12 +9,12 @@ import (
 	"github.com/creachadair/msync"
 )
 
-func TestFlag(t *testing.T) {
+func TestRelay(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		f := msync.NewFlag[int]()
+		h := msync.NewRelay[int]()
 
 		mustSet := func(v int, want bool) {
-			if got := f.Set(v); got != want {
+			if got := h.Set(v); got != want {
 				t.Errorf("Send(%v): got %v, want %v", v, got, want)
 			}
 		}
@@ -25,7 +25,7 @@ func TestFlag(t *testing.T) {
 		mustSet(3, false)
 
 		// The first value set is ready.
-		if got := <-f.Ready(); got != 1 {
+		if got := <-h.Ready(); got != 1 {
 			t.Errorf("Ready: got %v, want 1", got)
 		}
 
@@ -34,22 +34,22 @@ func TestFlag(t *testing.T) {
 		select {
 		case <-time.After(time.Second):
 			// OK, nothing here
-		case bad := <-f.Ready():
+		case bad := <-h.Ready():
 			t.Errorf("Ready: unexpected value: %v", bad)
 		}
 
 		// The next value sent is the next received.
 		mustSet(4, true)
-		if got := <-f.Ready(); got != 4 {
+		if got := <-h.Ready(); got != 4 {
 			t.Errorf("Ready: got %v, want 4", got)
 		}
 
 		// Play ping-ping.
-		p := msync.NewFlag[any]()
+		p := msync.NewRelay[any]()
 		var sum int
 		go func() {
 			for range 3 {
-				sum += <-f.Ready()
+				sum += <-h.Ready()
 				p.Set(nil)
 			}
 		}()

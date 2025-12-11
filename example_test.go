@@ -36,7 +36,7 @@ func ExampleValue() {
 func ExampleLink() {
 	s := msync.NewValue(1)
 
-	// Links support a form of optimitistic transaction control, allowing the
+	// Links support a form of optimistic transaction control, allowing the
 	// caller do detect whether its view of state has changed due to the actions
 	// of other goroutines.
 	//

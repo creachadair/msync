@@ -73,7 +73,7 @@ func ExampleLink() {
 
 	// A failed update invalidates the link.
 	if v.Validate() {
-		log.Fatal("unexpeted")
+		log.Fatal("unexpected")
 	}
 
 	// The underlying value has the last successful update.

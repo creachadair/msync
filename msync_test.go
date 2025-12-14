@@ -124,10 +124,11 @@ func TestValue(t *testing.T) {
 		v.Set("pluot")
 
 		// Verify that Wait gets some value of a concurrent Set.
+		c := v.Wait()
 		go v.Set("cherry")
 		go v.Set("raspberry")
 
-		if w := <-v.Wait(); w != "cherry" && w != "raspberry" {
+		if w := <-c; w != "cherry" && w != "raspberry" {
 			t.Errorf("Wait: got %q, want cherry or raspberry", w)
 		}
 	})

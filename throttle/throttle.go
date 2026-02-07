@@ -210,19 +210,7 @@ func NewSet[Key comparable, V any]() *Set[Key, V] { return new(Set[Key, V]) }
 //
 // All concurrent callers of Call with a given key share a single [Throttle].
 func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error) {
-	ekey := func() *setEntry[V] {
-		s.μ.Lock()
-		defer s.μ.Unlock()
-		e, ok := s.entry[key]
-		if !ok {
-			if s.entry == nil {
-				s.entry = make(map[Key]*setEntry[V])
-			}
-			e = &setEntry[V]{run: run}
-			s.entry[key] = e
-		}
-		return e
-	}()
+	ekey := s.ekey(key, run)
 	defer func() {
 		s.μ.Lock()
 		defer s.μ.Unlock()
@@ -241,4 +229,18 @@ func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error)
 		}
 	}()
 	return ekey.throttle.Call(ctx, ekey.run)
+}
+
+func (s *Set[Key, V]) ekey(key Key, run Func[V]) *setEntry[V] {
+	s.μ.Lock()
+	defer s.μ.Unlock()
+	e, ok := s.entry[key]
+	if !ok {
+		if s.entry == nil {
+			s.entry = make(map[Key]*setEntry[V])
+		}
+		e = &setEntry[V]{run: run}
+		s.entry[key] = e
+	}
+	return e
 }

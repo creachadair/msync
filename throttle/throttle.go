@@ -23,8 +23,8 @@ import (
 //
 // If fn is not a function or does not have one of these forms, Adapt panics.
 // If fn is already a Func[V], it is returned unmodified.
-// Wrapped function types with no error result report a nil error.
-// Wrapped function types with no value result report a zero value.
+// Wrapped functions with no error result report a nil error.
+// Wrapped functions with no value result report a zero value.
 func Adapt[V any](fn any) Func[V] {
 	var zero V
 	switch f := fn.(type) {

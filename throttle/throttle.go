@@ -67,10 +67,10 @@ func Adapt[V any](fn any) Func[V] {
 	}
 }
 
-// A Throttle coalesces calls to a function so that all goroutines concurrently
-// executing [Throttle.Call] share the result of a single execution of the
-// function made by one of the participants. This behaviour is sometimes also
-// described as "single-flighting".
+// A Throttle coalesces function calls so that all goroutines concurrently
+// executing [Throttle.Call] share the result of a single function execution
+// made by one of the participants. This behaviour is sometimes also described
+// as "single-flighting".
 //
 // A Throttle is initially idle. The first goroutine to execute [Throttle.Call]
 // on an idle throttle begins a new session and executes its function. All
@@ -90,11 +90,12 @@ func Adapt[V any](fn any) Func[V] {
 // goroutines have returned, the throttle is once again idle, and the next
 // caller will begin a new session.
 //
-// Within a given session, it is possible a target function partially executes
-// multiple times, if a goroutine leading the session returns early due to its
-// context ending. A function will only be executed by a single goroutine at a
-// time, however; and if it completes before its context ends (even with an
-// error) it will not be executed again within the scope of that session.
+// Within a given session, a proposed function may partially execute multiple
+// times, if one or more goroutines leading the session return early due to
+// context termination. At most one goroutine will be active in the throttle at
+// a time, however; and if any completes before its context ends (even with an
+// error) no further run functions will be executed within the scope of that
+// session.
 //
 // A zero Throttle is ready for use, but must not be copied after first use.
 type Throttle[V any] struct {
@@ -114,13 +115,18 @@ type Func[V any] func(context.Context) (V, error)
 // New constructs a new idle [Throttle].
 func New[V any]() *Throttle[V] { return new(Throttle[V]) }
 
-// Call invokes run guarded by t. Call is safe for concurrent use by multiple
-// goroutines.
+// Call proposes to invoke run guarded by t.
 //
 // If ctx ends before a value is resolved, Call returns a zero value and the
-// context error. Otherwise, it returns the value and error from calling the
-// underlying function, resolved by whichever goroutine successfully completed
-// the call.
+// context error. Otherwise, it returns the value and error from the first
+// proposed run function to complete among all goroutines concurrently active
+// in t during the execution of Call.
+//
+// Concurrent goroutines are permitted to propose different run functions to t,
+// so the values returned to a caller on one goroutine may not come from the
+// function passed to Call by that goroutine.
+//
+// Call is safe for concurrent use by multiple goroutines.
 func (t *Throttle[V]) Call(ctx context.Context, run Func[V]) (V, error) {
 	var zero V
 
@@ -194,12 +200,7 @@ func (t *Throttle[V]) runProtectLocked(ctx context.Context, run Func[V]) (_ V, e
 // ready for use, but must not be copied after first use.
 type Set[Key comparable, V any] struct {
 	μ     sync.Mutex // protects throttle
-	entry map[Key]*setEntry[V]
-}
-
-type setEntry[V any] struct {
-	run      Func[V]
-	throttle Throttle[V]
+	entry map[Key]*Throttle[V]
 }
 
 // NewSet constructs a new empty [Set].
@@ -210,7 +211,7 @@ func NewSet[Key comparable, V any]() *Set[Key, V] { return new(Set[Key, V]) }
 //
 // All concurrent callers of Call with a given key share a single [Throttle].
 func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error) {
-	ekey := s.ekey(key, run)
+	throttle := s.throttleFor(key)
 	defer func() {
 		s.μ.Lock()
 		defer s.μ.Unlock()
@@ -224,23 +225,23 @@ func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error)
 		//
 		// Note that we don't have to handle a panic here, as Throttle.Call has
 		// already converted a panic in the run function into an error.
-		if s.entry[key] == ekey {
+		if s.entry[key] == throttle {
 			delete(s.entry, key)
 		}
 	}()
-	return ekey.throttle.Call(ctx, ekey.run)
+	return throttle.Call(ctx, run)
 }
 
-func (s *Set[Key, V]) ekey(key Key, run Func[V]) *setEntry[V] {
+func (s *Set[Key, V]) throttleFor(key Key) *Throttle[V] {
 	s.μ.Lock()
 	defer s.μ.Unlock()
-	e, ok := s.entry[key]
+	t, ok := s.entry[key]
 	if !ok {
+		t = new(Throttle[V])
 		if s.entry == nil {
-			s.entry = make(map[Key]*setEntry[V])
+			s.entry = make(map[Key]*Throttle[V])
 		}
-		e = &setEntry[V]{run: run}
-		s.entry[key] = e
+		s.entry[key] = t
 	}
-	return e
+	return t
 }

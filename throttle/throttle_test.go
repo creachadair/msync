@@ -99,6 +99,64 @@ func TestThrottle(t *testing.T) {
 		})
 	})
 
+	t.Run("Different", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			// If two goroutines call a throttle with different functions, the
+			// function proposed by whichever caller wins the race will be used.
+			var th throttle.Throttle[int]
+
+			var wg sync.WaitGroup
+
+			// This goroutine initially wins the race to enter the throttle, but
+			// its context ends before it finishes executing.
+			ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+			defer cancel()
+			wg.Go(func() {
+				th.Call(ctx, func(ctx context.Context) (int, error) {
+					select {
+					case <-ctx.Done():
+						return -1, ctx.Err()
+					case <-time.After(5 * time.Second):
+						return 3, nil
+					}
+				})
+			})
+
+			// This goroutine activates next, after the first one times out; but
+			// it takes a while to finish.
+			time.Sleep(time.Millisecond)
+			ready := make(chan struct{})
+			wg.Go(func() {
+				got, err := th.Call(t.Context(), func(context.Context) (int, error) {
+					close(ready) // let the next goroutine into the waiting stage below
+					time.Sleep(5 * time.Millisecond)
+					return 3, nil
+				})
+				if err != nil {
+					t.Errorf("Call 2: unexpected error: %v", err)
+				}
+				if got != 3 {
+					t.Errorf("Call 2: got %d, want 3", got)
+				}
+			})
+
+			// This goroutine enters while the second goroutine is running, and
+			// gets the value from that goroutine's function rather than its own.
+			<-ready
+			wg.Go(func() {
+				got, err := th.Call(t.Context(), func(context.Context) (int, error) { return 99999, nil })
+				if err != nil {
+					t.Errorf("Call 3: unexpected error: %v", err)
+				}
+				if got != 3 {
+					t.Errorf("Call 3: got %d, want 3", got)
+				}
+			})
+
+			wg.Wait()
+		})
+	})
+
 	t.Run("Many", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			var th throttle.Throttle[string]

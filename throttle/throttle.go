@@ -84,11 +84,11 @@ func Adapt[V any](fn any) Func[V] {
 //     function, and reports a value and error, which is then shared among all
 //     the goroutines participating in the session.
 //
-// If the execution of the throttled function ends because the context
-// governing its calling goroutine ended, another waiting goroutine (if any) is
-// woken up and given an oppoartunity to use the throttle.  Once all concurrent
-// goroutines have returned, the throttle is once again idle, and the next
-// caller will begin a new session.
+// If the leading goroutine's execution ends because the context governing its
+// calling goroutine ended, another waiting goroutine (if any) is woken up and
+// given an oppoartunity to use the throttle.  Once all concurrent goroutines
+// have returned, the throttle is once again idle, and the next caller will
+// begin a new session.
 //
 // Within a given session, a proposed function may partially execute multiple
 // times, if one or more goroutines leading the session return early due to

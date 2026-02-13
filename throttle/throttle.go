@@ -86,7 +86,7 @@ func Adapt[V any](fn any) Func[V] {
 //
 // If the leading goroutine's execution ends because the context governing its
 // calling goroutine ended, another waiting goroutine (if any) is woken up and
-// given an oppoartunity to use the throttle.  Once all concurrent goroutines
+// given an opportunity to use the throttle.  Once all concurrent goroutines
 // have returned, the throttle is once again idle, and the next caller will
 // begin a new session.
 //

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+	"unsafe"
 
 	"github.com/creachadair/msync"
 )
@@ -70,6 +71,8 @@ func TestRelay(t *testing.T) {
 
 func TestValue_Zero(t *testing.T) {
 	var v msync.Value[int]
+
+	t.Logf("%T is %d bytes", msync.Value[int]{}, unsafe.Sizeof(v))
 
 	if got, want := v.Get(), 0; got != want {
 		t.Errorf("Get from zero Value: got %d, want %d", got, want)
@@ -141,6 +144,8 @@ func TestValue_llsc(t *testing.T) {
 			t.Errorf("Value is %d, want %d", got, want)
 		}
 	}
+
+	t.Logf("%T is %d bytes", msync.Link[int]{}, unsafe.Sizeof(msync.Link[int]{}))
 
 	t.Run("Success", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {

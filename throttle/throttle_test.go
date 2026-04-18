@@ -11,6 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/creachadair/mds/mctx"
 	"github.com/creachadair/mds/mtest"
 	"github.com/creachadair/mds/value"
 	"github.com/creachadair/msync/throttle"
@@ -161,10 +162,10 @@ func TestThrottle(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			var th throttle.Throttle[string]
 
-			type idKey struct{}
+			var idKey mctx.Key[int]
 			var active atomic.Int32
 			f := func(ctx context.Context) (string, error) {
-				id := ctx.Value(idKey{}).(int)
+				id := idKey.Lookup(ctx).Get()
 
 				v := active.Add(1)
 				defer active.Add(-1)
@@ -195,7 +196,7 @@ func TestThrottle(t *testing.T) {
 				ctx := value.Cond(isCancel, dead, t.Context())
 
 				wg.Go(func() {
-					ctx := context.WithValue(ctx, idKey{}, id)
+					ctx := idKey.Attach(ctx, id)
 					v, err := th.Call(ctx, f)
 					if errors.Is(err, context.Canceled) {
 						// The only workers that should report cancellation are those we

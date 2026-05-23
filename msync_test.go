@@ -192,6 +192,7 @@ func TestValue_llsc(t *testing.T) {
 				t.Error("StoreCond reported true")
 			}
 			checkValue(t, v.Get, 20)
+			checkValue(t, s.Get, 10) // the snapshot did not change
 		})
 	})
 
@@ -240,6 +241,8 @@ func TestValue_llsc(t *testing.T) {
 				t.Error("StoreCond(2) reported true")
 			}
 			checkValue(t, v.Get, 30)
+			checkValue(t, s1.Get, 30) // s1 succeeded and was updated
+			checkValue(t, s2.Get, 20) // s2 failed and remained unchanged
 		})
 	})
 

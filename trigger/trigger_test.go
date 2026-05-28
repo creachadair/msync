@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/creachadair/msync/trigger"
 )
@@ -99,6 +100,34 @@ func TestCond(t *testing.T) {
 			checkNotActive(t, tr)
 			tr.Reset() // safe to do it multiple times
 			checkNotActive(t, tr)
+		})
+	})
+
+	t.Run("Batch", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			tr := trigger.New()
+			checkNotActive(t, tr)
+
+			// Start multiple concurrent batches of goroutines and verify that
+			// each group get woken up by a matching signal.
+			const numBatches = 5
+			const tasksPerBatch = 10
+			for b := range numBatches {
+				var wg sync.WaitGroup
+				for i := range tasksPerBatch {
+					wg.Go(func() {
+						select {
+						case <-tr.Ready():
+							// OK, done
+						case <-time.After(5 * time.Minute):
+							t.Errorf("batch %d task %d timed out waiting for signal", b+1, i+1)
+						}
+					})
+				}
+				time.AfterFunc(time.Second, func() { tr.Signal() })
+				wg.Wait()
+				checkNotActive(t, tr)
+			}
 		})
 	})
 }

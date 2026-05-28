@@ -213,22 +213,23 @@ func NewSet[Key comparable, V any]() *Set[Key, V] { return new(Set[Key, V]) }
 func (s *Set[Key, V]) Call(ctx context.Context, key Key, run Func[V]) (V, error) {
 	throttle := s.throttleFor(key)
 	defer func() {
-		if ctx.Err() == nil {
-			// We successfully resolved a value from the throttle.
-			//
-			// If the throttle for this key is still the one we started with,
-			// remove it from the set: Any other concurrent goroutines sharing
-			// this throttle have either given up, or been delivered the same
-			// value. Either way, this session is done, and the next caller on
-			// this key can start a new one.
-			//
-			// We could also just leave the idle throttle in the map, but if the
-			// caller creates a lot of keys we don't want a memory leak.
-			s.μ.Lock()
-			defer s.μ.Unlock()
-			if s.entry[key] == throttle {
-				delete(s.entry, key)
-			}
+		if ctx.Err() != nil {
+			return
+		}
+		// We successfully resolved a value from the throttle.
+		//
+		// If the throttle for this key is still the one we started with,
+		// remove it from the set: Any other concurrent goroutines sharing
+		// this throttle have either given up, or been delivered the same
+		// value. Either way, this session is done, and the next caller on
+		// this key can start a new one.
+		//
+		// We could also just leave the idle throttle in the map, but if the
+		// caller creates a lot of keys we don't want a memory leak.
+		s.μ.Lock()
+		defer s.μ.Unlock()
+		if s.entry[key] == throttle {
+			delete(s.entry, key)
 		}
 	}()
 	return throttle.Call(ctx, run)

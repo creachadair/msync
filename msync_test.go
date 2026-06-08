@@ -106,17 +106,19 @@ func TestValue(t *testing.T) {
 		// Verify that a waiter wakes for a set.
 		setAfter(5*time.Millisecond, "plum")
 
-		if got, ok := <-v.Wait(); !ok || got != "plum" {
-			t.Errorf("Wait: got %q, %v; want plum, true", got, ok)
+		select {
+		case <-v.Wait():
+			mustGet("plum")
+		case <-time.After(time.Second):
+			t.Fatal("Timed out unexpectedly in Wait")
 		}
-		mustGet("plum")
 
 		// Verify that a waiter times out if no Set occurs.
 		select {
 		case <-time.After(time.Second):
 			t.Log("Correctly timed out waiting for update")
-		case got := <-v.Wait():
-			t.Errorf("Got value %q, wanted timeout", got)
+		case <-v.Wait():
+			t.Error("Wait completed when it should not have")
 		}
 
 		// Verify that if a waiter gives up, updates do not block.
@@ -127,11 +129,12 @@ func TestValue(t *testing.T) {
 		v.Set("pluot")
 
 		// Verify that Wait gets some value of a concurrent Set.
-		c := v.Wait()
+		ready := v.Wait()
 		go v.Set("cherry")
 		go v.Set("raspberry")
 
-		if w := <-c; w != "cherry" && w != "raspberry" {
+		<-ready
+		if w := v.Get(); w != "cherry" && w != "raspberry" {
 			t.Errorf("Wait: got %q, want cherry or raspberry", w)
 		}
 	})
@@ -258,8 +261,9 @@ func TestValue_llsc(t *testing.T) {
 					t.Error("StoreCond reported false")
 				}
 			})
-			if got := <-v.Wait(); got != s.Get() {
-				t.Errorf("Wait got %d, want %d", got, s.Get())
+			<-v.Wait()
+			if got := v.Get(); got != s.Get() {
+				t.Errorf("Value after Wait = %d, want %d", got, s.Get())
 			}
 		})
 	})

@@ -25,8 +25,8 @@ func ExampleValue() {
 	select {
 	case <-time.After(10 * time.Second):
 		log.Fatal("Timeout waiting for value to change")
-	case v := <-s.Wait():
-		fmt.Println(v)
+	case <-s.Wait():
+		fmt.Printf("Value changed, now %v", s.Get())
 	}
 
 	// Use Get to fetch the current value at any time.

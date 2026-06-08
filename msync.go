@@ -14,9 +14,9 @@ import (
 // contents without separate synchronization.
 type Value[T any] struct {
 	mu   sync.Mutex
+	wait chan struct{} // reporting channel for wait
+	gen  uint64        // write generation, incremented by Set and SC
 	x    T
-	gen  uint64   // write generation, incremented by Set and SC
-	wait []chan T // reporting channels for wait
 }
 
 // NewValue creates a new Value with the given initial value.
@@ -35,11 +35,11 @@ func (v *Value[T]) setLocked(newValue T) {
 	v.x = newValue
 	v.gen++
 
-	for _, ch := range v.wait {
-		ch <- newValue
-		close(ch)
+	// If waiters are expecting a signal, give it to them.
+	if v.wait != nil {
+		close(v.wait)
+		v.wait = nil
 	}
-	v.wait = v.wait[:0]
 }
 
 // Get returns the current value stored in v.
@@ -49,22 +49,17 @@ func (v *Value[T]) Get() T {
 	return v.x
 }
 
-// Wait returns a new channel that blocks until the value of v is set via
-// [Value.Set] or [Link.StoreCond] (even if the new value is the same as the
-// previous one), then delivers the current value of v. Each call to Wait
-// returns a new channel.  Once a value has been delivered to the channel, it
-// is closed.
-//
-// If multiple goroutines set v concurrently, the channel will deliver the
-// value from one of them, but not necessarily the first.
-func (v *Value[T]) Wait() <-chan T {
+// Wait returns a new channel that is closed when the value of v is set via
+// [Value.Set] or [Link.StoreCond].
+func (v *Value[T]) Wait() <-chan struct{} {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	// Buffer so that delivery does not block if the caller gives up.
-	ch := make(chan T, 1)
-	v.wait = append(v.wait, ch)
-	return ch
+	if v.wait == nil {
+		v.wait = make(chan struct{})
+	}
+	return v.wait
 }
 
 // LoadLink links a view of the current value of v.

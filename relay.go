@@ -11,7 +11,7 @@ type Relay[T any] struct {
 	ch chan T
 }
 
-// NewRelay constructs a new empty handoff.
+// NewRelay constructs a new empty relay.
 func NewRelay[T any]() *Relay[T] { return &Relay[T]{ch: make(chan T, 1)} }
 
 // Set buffers or discards v, and reports whether v was buffered (true) or

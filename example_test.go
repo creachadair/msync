@@ -58,7 +58,8 @@ func ExampleLink() {
 		log.Fatal("unexpected")
 	}
 
-	// We can re-link to get a new snapshot. It is OK to reuse a link.
+	// We can re-link to get a new snapshot. It is OK to reuse a link once it is
+	// known to be invalid (e.g., after a call to StoreCond).
 	s.LoadLink(v)
 
 	// Time passes. While we are working, another goroutine modifies the value.

@@ -23,7 +23,7 @@ type Value[T any] struct {
 func NewValue[T any](init T) *Value[T] { return &Value[T]{x: init} }
 
 // Set updates the value stored in v to newValue. Calling Set also wakes any
-// goroutines that are blocked in the Wait method. Set invalidates any linked
+// goroutines that are blocked on a Wait channel. Set invalidates any linked
 // snapshots open on v, even if the target value does not change.
 func (v *Value[T]) Set(newValue T) {
 	v.mu.Lock()
@@ -49,8 +49,8 @@ func (v *Value[T]) Get() T {
 	return v.x
 }
 
-// Wait returns a new channel that is closed when the value of v is set via
-// [Value.Set] or [Link.StoreCond].
+// Wait returns a channel that is closed the next time the value of v is set
+// via [Value.Set] or a successful call to [Link.StoreCond].
 func (v *Value[T]) Wait() <-chan struct{} {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -98,8 +98,8 @@ func (lv *Link[T]) Get() T { return lv.snap }
 // that initialized lv.
 //
 // Once StoreCond has been called, whether successful or not, lv is forever
-// invalid (until re-linked).  If it succeeded, the Get method returns the
-// updated value.
+// invalid.  It is safe to re-link and reuse an invalid [Link]. After StoreCond
+// succeeds, the Get method returns the updated value.
 func (lv *Link[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
@@ -111,11 +111,11 @@ func (lv *Link[T]) StoreCond(v T) bool {
 	return false
 }
 
-// Validate reports whether a call to StoreCond would have succeeded given the
-// current state of lv. When Validate reports true, it means lv was valid at
-// the time of the call; it may have become invalid by the time the caller
-// receives the result. If Validate reports false, lv is forever invalid (until
-// re-linked).
+// Validate reports whether a call to [Link.StoreCond] would have succeeded
+// given the current state of lv. When Validate reports true, it means lv was
+// valid at the time of the call; it may have become invalid by the time the
+// caller receives the result. If Validate reports false, lv is forever invalid.
+// It is safe to re-link and reuse an invalid [Link].
 func (lv *Link[T]) Validate() bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

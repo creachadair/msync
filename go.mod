@@ -2,7 +2,7 @@ module github.com/creachadair/msync
 
 go 1.25.0
 
-require github.com/creachadair/mds v0.28.1
+require github.com/creachadair/mds v0.29.0
 
 require (
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect

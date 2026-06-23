@@ -95,6 +95,11 @@ func TestValue(t *testing.T) {
 		setAfter := func(d time.Duration, s string) {
 			time.AfterFunc(d, func() { v.Set(s) })
 		}
+		updateAfter := func(d time.Duration, repl string) {
+			time.AfterFunc(d, func() {
+				v.Update(func(s *string) { *s = repl })
+			})
+		}
 
 		// Verify the initial value.
 		mustGet("apple")
@@ -103,12 +108,26 @@ func TestValue(t *testing.T) {
 		v.Set("pear")
 		mustGet("pear")
 
+		// Verify that we can Get the expected value from an Update.
+		v.Update(func(s *string) { *s += "?" })
+		mustGet("pear?")
+
 		// Verify that a waiter wakes for a set.
 		setAfter(5*time.Millisecond, "plum")
 
 		select {
 		case <-v.Wait():
 			mustGet("plum")
+		case <-time.After(time.Second):
+			t.Fatal("Timed out unexpectedly in Wait")
+		}
+
+		// Verify that a waiter wakes for an update.
+		updateAfter(5*time.Millisecond, "lolwut")
+
+		select {
+		case <-v.Wait():
+			mustGet("lolwut")
 		case <-time.After(time.Second):
 			t.Fatal("Timed out unexpectedly in Wait")
 		}
@@ -130,12 +149,13 @@ func TestValue(t *testing.T) {
 
 		// Verify that Wait gets some value of a concurrent Set.
 		ready := v.Wait()
-		go v.Set("cherry")
-		go v.Set("raspberry")
+		setAfter(time.Millisecond, "cherry")
+		setAfter(time.Millisecond, "raspberry")
+		updateAfter(time.Millisecond, "quince")
 
 		<-ready
-		if w := v.Get(); w != "cherry" && w != "raspberry" {
-			t.Errorf("Wait: got %q, want cherry or raspberry", w)
+		if w := v.Get(); w != "cherry" && w != "raspberry" && w != "quince" {
+			t.Errorf("Wait: got %q, want cherry, raspberry, or quince", w)
 		}
 	})
 }
@@ -150,31 +170,57 @@ func TestValue_llsc(t *testing.T) {
 
 	t.Logf("%T is %d bytes", msync.Link[int]{}, unsafe.Sizeof(msync.Link[int]{}))
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("Store/OK", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			v := msync.NewValue(1)
 			checkValue(t, v.Get, 1)
 
-			t.Log("Success")
 			s := v.LoadLink(nil)
 			checkValue(t, s.Get, 1)
 
 			if !s.Validate() {
 				t.Error("Validate reported false")
 			}
-
 			checkValue(t, v.Get, 1)
 
 			if !s.StoreCond(10) {
 				t.Error("StoreCond reported false")
 			}
 			checkValue(t, s.Get, 10) // updated
+			checkValue(t, v.Get, 10) // updated
 
 			if s.StoreCond(10) {
-				t.Errorf("Second StoreCond reported true")
+				t.Error("Second StoreCond reported true")
 			}
 			checkValue(t, v.Get, 10)
 		})
+	})
+
+	t.Run("Update/OK", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			v := msync.NewValue(1)
+			checkValue(t, v.Get, 1)
+
+			s := v.LoadLink(nil)
+			checkValue(t, s.Get, 1)
+
+			if !s.Validate() {
+				t.Errorf("Validate reported false")
+			}
+			checkValue(t, s.Get, 1)
+
+			if !s.UpdateCond(func(v *int) { *v = 10 }) {
+				t.Error("UpdateCond reported false")
+			}
+			checkValue(t, s.Get, 10) // updated
+			checkValue(t, v.Get, 10) // updated
+
+			if s.UpdateCond(func(*int) {}) {
+				t.Error("Second UpdateCond reported true")
+			}
+			checkValue(t, v.Get, 10)
+		})
+
 	})
 
 	t.Run("Fail/Set", func(t *testing.T) {
@@ -236,12 +282,44 @@ func TestValue_llsc(t *testing.T) {
 			checkValue(t, v.Get, 20)
 
 			if !s1.StoreCond(30) {
-				t.Error("StoreCond(1) reported false")
+				t.Error("StoreCond(30) reported false")
 			}
 			checkValue(t, v.Get, 30)
 
 			if s2.StoreCond(40) {
-				t.Error("StoreCond(2) reported true")
+				t.Error("StoreCond(40) reported true")
+			}
+			checkValue(t, v.Get, 30)
+			checkValue(t, s1.Get, 30) // s1 succeeded and was updated
+			checkValue(t, s2.Get, 20) // s2 failed and remained unchanged
+		})
+	})
+
+	t.Run("Fail/UpdateCond", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			v := msync.NewValue(20)
+
+			var v1, v2 msync.Link[int]
+
+			s1 := v.LoadLink(&v1)
+			s2 := v.LoadLink(&v2)
+
+			if s1 != &v1 {
+				t.Errorf("LoadLink(v1): got %p, want %p", s1, &v1)
+			}
+			if s2 != &v2 {
+				t.Errorf("LoadLink(v2): got %p, want %p", s2, &v2)
+			}
+
+			checkValue(t, v.Get, 20)
+
+			if !s1.UpdateCond(func(v *int) { *v = 30 }) {
+				t.Error("UpdateCond(30) reported false")
+			}
+			checkValue(t, v.Get, 30)
+
+			if s2.UpdateCond(func(v *int) { *v = 40 }) {
+				t.Error("UpdateCond(40) reported true")
 			}
 			checkValue(t, v.Get, 30)
 			checkValue(t, s1.Get, 30) // s1 succeeded and was updated
@@ -259,6 +337,25 @@ func TestValue_llsc(t *testing.T) {
 			time.AfterFunc(time.Second, func() {
 				if !s.StoreCond(50) {
 					t.Error("StoreCond reported false")
+				}
+			})
+			<-v.Wait()
+			if got := v.Get(); got != s.Get() {
+				t.Errorf("Value after Wait = %d, want %d", got, s.Get())
+			}
+		})
+	})
+
+	t.Run("UpdateCondWait", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			v := msync.NewValue(30)
+
+			s := v.LoadLink(nil)
+
+			// Verify that a successful StoreCond triggers waiters.
+			time.AfterFunc(time.Second, func() {
+				if !s.UpdateCond(func(v *int) { *v = 50 }) {
+					t.Error("UpdateCond reported false")
 				}
 			})
 			<-v.Wait()

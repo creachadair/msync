@@ -31,6 +31,17 @@ func (v *Value[T]) Set(newValue T) {
 	v.setLocked(newValue)
 }
 
+// Update updates the value stored in v in-place using f.  Calling Update also
+// wakes any goroutines that are blocked on a Wait channel, and invalidates any
+// linked snapshots open on v.
+func (v *Value[T]) Update(f func(*T)) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	cp := v.x // shallow copy, in case f fails during an update
+	f(&cp)
+	v.setLocked(cp)
+}
+
 func (v *Value[T]) setLocked(newValue T) {
 	v.x = newValue
 	v.gen++
@@ -93,9 +104,9 @@ type Link[T any] struct {
 func (lv *Link[T]) Get() T { return lv.snap }
 
 // StoreCond attempts to update the linked [Value] with v, and reports whether
-// the update succeeded. An update succeeds if no successful StoreCond or Set
-// operation has been applied to the linked Value since the [Value.LoadLink]
-// that initialized lv.
+// the update succeeded. An update succeeds if no successful StoreCond,
+// UpdateCond, Set, or Update operation has been applied to the linked Value
+// since the [Value.LoadLink] that initialized lv.
 //
 // Once StoreCond has been called, whether successful or not, lv is invalid.
 // It is safe to re-link and reuse an invalid [Link].
@@ -106,6 +117,25 @@ func (lv *Link[T]) StoreCond(v T) bool {
 	if lv.v.gen == lv.gen {
 		lv.snap = v
 		lv.v.setLocked(v)
+		return true
+	}
+	return false
+}
+
+// UpdateCond attempts to update the linked [Value] with f, and reports whether
+// the update succeeded. An update succeeds if no successful StoreCond,
+// UpdateCond, Set, or Update operation has been applied to the linked Value
+// since the [Value.LoadLink] that initialized lv.
+//
+// Once UpdateCond has been called, whether successful or not, lv is invalid.
+// It is safe to re-link and reuse an invalid [Link].
+// If UpdateCond succeeds, the Get method returns the updated value.
+func (lv *Link[T]) UpdateCond(f func(*T)) bool {
+	lv.v.mu.Lock()
+	defer lv.v.mu.Unlock()
+	if lv.v.gen == lv.gen {
+		f(&lv.snap)
+		lv.v.setLocked(lv.snap)
 		return true
 	}
 	return false

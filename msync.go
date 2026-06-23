@@ -92,14 +92,14 @@ type Link[T any] struct {
 // Get returns the value captured in the snapshot.
 func (lv *Link[T]) Get() T { return lv.snap }
 
-// StoreCond attempts to update the linked Value with v, and reports whether
+// StoreCond attempts to update the linked [Value] with v, and reports whether
 // the update succeeded. An update succeeds if no successful StoreCond or Set
 // operation has been applied to the linked Value since the [Value.LoadLink]
 // that initialized lv.
 //
-// Once StoreCond has been called, whether successful or not, lv is forever
-// invalid.  It is safe to re-link and reuse an invalid [Link]. After StoreCond
-// succeeds, the Get method returns the updated value.
+// Once StoreCond has been called, whether successful or not, lv is invalid.
+// It is safe to re-link and reuse an invalid [Link].
+// If StoreCond succeeds, the Get method returns the updated value.
 func (lv *Link[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
@@ -114,7 +114,7 @@ func (lv *Link[T]) StoreCond(v T) bool {
 // Validate reports whether a call to [Link.StoreCond] would have succeeded
 // given the current state of lv. When Validate reports true, it means lv was
 // valid at the time of the call; it may have become invalid by the time the
-// caller receives the result. If Validate reports false, lv is forever invalid.
+// caller receives the result. If Validate reports false, lv is invalid.
 // It is safe to re-link and reuse an invalid [Link].
 func (lv *Link[T]) Validate() bool {
 	lv.v.mu.Lock()

@@ -93,9 +93,9 @@ func (v *Value[T]) LoadLink(lv *Link[T]) *Link[T] {
 // and does not change if the underlying Value is updated separately.
 //
 // A linked snapshot is either "valid" or "invalid". It is "valid" if a call to
-// [Link.StoreCond] could succeed at some point in the future; otherwise it is
-// "invalid". A valid snapshot may become invalid, but an invalid snapshot is
-// permanently so. See also: [Link.Validate].
+// [Link.StoreCond] or [Link.UpdateCond] could succeed at some point in the
+// future; otherwise it is "invalid". A valid snapshot may become invalid, but
+// an invalid snapshot is permanently so. See also: [Link.Validate].
 type Link[T any] struct {
 	v    *Value[T] // the base Value
 	snap T         // the snapshotted value
@@ -145,11 +145,11 @@ func (lv *Link[T]) UpdateCond(f func(*T)) bool {
 	return false
 }
 
-// Validate reports whether a call to [Link.StoreCond] would have succeeded
-// given the current state of lv. When Validate reports true, it means lv was
-// valid at the time of the call; it may have become invalid by the time the
-// caller receives the result. If Validate reports false, lv is invalid.
-// It is safe to re-link and reuse an invalid [Link].
+// Validate reports whether a call to [Link.StoreCond] or [Link.UpdateCond]
+// would have succeeded given the current state of lv. When Validate reports
+// true, it means lv was valid at the time of the call; it may have become
+// invalid by the time the caller receives the result. If Validate reports
+// false, lv is invalid.  It is safe to re-link and reuse an invalid [Link].
 func (lv *Link[T]) Validate() bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

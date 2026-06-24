@@ -127,7 +127,8 @@ func (lv *Link[T]) StoreCond(v T) bool {
 // UpdateCond attempts to update the linked [Value] with f, and reports whether
 // the update succeeded. An update succeeds if no successful StoreCond,
 // UpdateCond, Set, or Update operation has been applied to the linked Value
-// since the [Value.LoadLink] that initialized lv.
+// since the [Value.LoadLink] that initialized lv.  If an update is not
+// possible, f is not called.
 //
 // Once UpdateCond has been called, whether successful or not, lv is invalid.
 // It is safe to re-link and reuse an invalid [Link].

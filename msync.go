@@ -34,6 +34,8 @@ func (v *Value[T]) Set(newValue T) {
 // Update updates the value stored in v in-place using f.  Calling Update also
 // wakes any goroutines that are blocked on a Wait channel, and invalidates any
 // linked snapshots open on v.
+//
+// The pointer passed to f will never be nil.
 func (v *Value[T]) Update(f func(*T)) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -130,6 +132,8 @@ func (lv *Link[T]) StoreCond(v T) bool {
 // Once UpdateCond has been called, whether successful or not, lv is invalid.
 // It is safe to re-link and reuse an invalid [Link].
 // If UpdateCond succeeds, the Get method returns the updated value.
+//
+// The pointer passed to f will never be nil.
 func (lv *Link[T]) UpdateCond(f func(*T)) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

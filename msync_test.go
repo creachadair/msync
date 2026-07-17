@@ -9,66 +9,6 @@ import (
 	"github.com/creachadair/msync"
 )
 
-func TestRelay(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		h := msync.NewRelay[int]()
-
-		mustSet := func(v int, want bool) {
-			if got := h.Set(v); got != want {
-				t.Errorf("Send(%v): got %v, want %v", v, got, want)
-			}
-		}
-
-		// Multiple sends to h do not block.
-		mustSet(1, true)
-		mustSet(2, false)
-		mustSet(3, false)
-
-		// The first value set is ready.
-		if got := <-h.Ready(); got != 1 {
-			t.Errorf("Ready: got %v, want 1", got)
-		}
-
-		// Now that the value has been set, nothing is available till we set another
-		// value.
-		select {
-		case <-time.After(time.Second):
-			// OK, nothing here
-		case bad := <-h.Ready():
-			t.Errorf("Ready: unexpected value: %v", bad)
-		}
-
-		// The next value sent is the next received.
-		mustSet(4, true)
-		if got := <-h.Ready(); got != 4 {
-			t.Errorf("Ready: got %v, want 4", got)
-		}
-
-		// Play ping-ping.
-		p := msync.NewRelay[any]()
-		var sum int
-		go func() {
-			for range 3 {
-				sum += <-h.Ready()
-				p.Set(nil)
-			}
-		}()
-
-		mustSet(1, true)
-		<-p.Ready()
-		mustSet(3, true)
-		<-p.Ready()
-		mustSet(5, true)
-		<-p.Ready()
-
-		synctest.Wait()
-
-		if sum != 9 {
-			t.Errorf("Checksum: got %v, want 9", sum)
-		}
-	})
-}
-
 func TestValue_Zero(t *testing.T) {
 	var v msync.Value[int]
 

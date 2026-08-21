@@ -7,7 +7,7 @@ import (
 
 // A Value is a mutable container for a single value of type T that can be
 // concurrently accessed by multiple goroutines. A zero Value is ready for use,
-// but must not be copied after its first use.
+// and contains a zero of type T, but must not be copied after its first use.
 //
 // The Value takes ownership of the value in its custody. In particular, if a
 // pointer or a slice is stored in a Value, the caller must not modify the
@@ -35,7 +35,9 @@ func (v *Value[T]) Set(newValue T) {
 // wakes any goroutines that are blocked on a Wait channel, and invalidates any
 // linked snapshots open on v.
 //
-// The pointer passed to f will never be nil.
+// The argument to f is a non-nil pointer to a copy of the current value.
+// After f returns, the updated copy is stored. If f panics, the stored value
+// is not modified.
 func (v *Value[T]) Update(f func(*T)) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -48,14 +50,14 @@ func (v *Value[T]) setLocked(newValue T) {
 	v.x = newValue
 	v.gen++
 
-	// If waiters are expecting a signal, give it to them.
+	// Broadcast to any waiters.
 	if v.wait != nil {
 		close(v.wait)
 		v.wait = nil
 	}
 }
 
-// Get returns the current value stored in v.
+// Get returns a copy of the current value stored in v.
 func (v *Value[T]) Get() T {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -67,8 +69,6 @@ func (v *Value[T]) Get() T {
 func (v *Value[T]) Wait() <-chan struct{} {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-
-	// Buffer so that delivery does not block if the caller gives up.
 	if v.wait == nil {
 		v.wait = make(chan struct{})
 	}
@@ -78,6 +78,7 @@ func (v *Value[T]) Wait() <-chan struct{} {
 // LoadLink links a view of the current value of v.
 // If lv == nil, a new link is allocated and returned.
 // Otherwise, the contents of *lv are replaced and lv is returned.
+// It is safe to reuse an existing Link, whether valid or invalid.
 func (v *Value[T]) LoadLink(lv *Link[T]) *Link[T] {
 	if lv == nil {
 		lv = new(Link[T])
@@ -88,9 +89,10 @@ func (v *Value[T]) LoadLink(lv *Link[T]) *Link[T] {
 	return lv
 }
 
-// Link is a snapshot of a Value acquired by a call to its LoadLink method.
-// Use [Link.Get] to obtain the captured value.  The captured value is fixed,
-// and does not change if the underlying Value is updated separately.
+// Link is a snapshot (specifically, a by-value copy) of a [Value] acquired by
+// a call to [Value.LoadLink].  Use [Link.Get] to read the captured value.
+// The captured value is fixed, and does not change if the underlying Value is
+// updated separately.
 //
 // A linked snapshot is either "valid" or "invalid". It is "valid" if a call to
 // [Link.StoreCond] or [Link.UpdateCond] could succeed at some point in the
@@ -111,8 +113,7 @@ func (lv *Link[T]) Get() T { return lv.snap }
 // since the [Value.LoadLink] that initialized lv.
 //
 // Once StoreCond has been called, whether successful or not, lv is invalid.
-// It is safe to re-link and reuse an invalid [Link].
-// If StoreCond succeeds, the Get method returns the updated value.
+// After StoreCond succeeds, the Get method returns the updated value.
 func (lv *Link[T]) StoreCond(v T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
@@ -131,10 +132,11 @@ func (lv *Link[T]) StoreCond(v T) bool {
 // possible, f is not called.
 //
 // Once UpdateCond has been called, whether successful or not, lv is invalid.
-// It is safe to re-link and reuse an invalid [Link].
-// If UpdateCond succeeds, the Get method returns the updated value.
+// After UpdateCond succeeds, the Get method returns the updated value.
 //
-// The pointer passed to f will never be nil.
+// The argument to f is a non-nil pointer to a copy of the current value.
+// After f returns, the updated copy is stored. If f panics, the linked value
+// is not modified.
 func (lv *Link[T]) UpdateCond(f func(*T)) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
@@ -147,10 +149,11 @@ func (lv *Link[T]) UpdateCond(f func(*T)) bool {
 }
 
 // Validate reports whether a call to [Link.StoreCond] or [Link.UpdateCond]
-// would have succeeded given the current state of lv. When Validate reports
-// true, it means lv was valid at the time of the call; it may have become
-// invalid by the time the caller receives the result. If Validate reports
-// false, lv is invalid.  It is safe to re-link and reuse an invalid [Link].
+// would have succeeded given the current state of lv. Iv Validate reports
+// false, lv is (permanently) invalid until re-linked.
+//
+// When Validate reports true, it means lv was valid at some instant during the
+// call; it may have become invalid by the time the caller receives the result.
 func (lv *Link[T]) Validate() bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()

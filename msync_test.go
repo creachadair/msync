@@ -37,7 +37,7 @@ func TestValue(t *testing.T) {
 		}
 		updateAfter := func(d time.Duration, repl string) {
 			time.AfterFunc(d, func() {
-				v.Update(func(s *string) { *s = repl })
+				v.Update(func(string) string { return repl })
 			})
 		}
 
@@ -49,7 +49,7 @@ func TestValue(t *testing.T) {
 		mustGet("pear")
 
 		// Verify that we can Get the expected value from an Update.
-		v.Update(func(s *string) { *s += "?" })
+		v.Update(func(s string) string { return s + "?" })
 		mustGet("pear?")
 
 		// Verify that a waiter wakes for a set.
@@ -149,13 +149,13 @@ func TestValue_llsc(t *testing.T) {
 			}
 			checkValue(t, s.Get, 1)
 
-			if !s.UpdateCond(func(v *int) { *v = 10 }) {
+			if !s.UpdateCond(func(int) int { return 10 }) {
 				t.Error("UpdateCond reported false")
 			}
 			checkValue(t, s.Get, 10) // updated
 			checkValue(t, v.Get, 10) // updated
 
-			if s.UpdateCond(func(*int) {}) {
+			if s.UpdateCond(func(int) int { return -1 }) {
 				t.Error("Second UpdateCond reported true")
 			}
 			checkValue(t, v.Get, 10)
@@ -253,12 +253,12 @@ func TestValue_llsc(t *testing.T) {
 
 			checkValue(t, v.Get, 20)
 
-			if !s1.UpdateCond(func(v *int) { *v = 30 }) {
+			if !s1.UpdateCond(func(int) int { return 30 }) {
 				t.Error("UpdateCond(30) reported false")
 			}
 			checkValue(t, v.Get, 30)
 
-			if s2.UpdateCond(func(v *int) { *v = 40 }) {
+			if s2.UpdateCond(func(int) int { return 40 }) {
 				t.Error("UpdateCond(40) reported true")
 			}
 			checkValue(t, v.Get, 30)
@@ -294,7 +294,7 @@ func TestValue_llsc(t *testing.T) {
 
 			// Verify that a successful StoreCond triggers waiters.
 			time.AfterFunc(time.Second, func() {
-				if !s.UpdateCond(func(v *int) { *v = 50 }) {
+				if !s.UpdateCond(func(int) int { return 50 }) {
 					t.Error("UpdateCond reported false")
 				}
 			})

@@ -31,19 +31,16 @@ func (v *Value[T]) Set(newValue T) {
 	v.setLocked(newValue)
 }
 
-// Update updates the value stored in v in-place using f.  Calling Update also
-// wakes any goroutines that are blocked on a Wait channel, and invalidates any
-// linked snapshots open on v.
+// Update updates the value stored in v using f.  Calling Update also wakes any
+// goroutines that are blocked on a Wait channel, and invalidates any linked
+// snapshots open on v.
 //
-// The argument to f is a non-nil pointer to a copy of the current value.
-// After f returns, the updated copy is stored. If f panics, the stored value
-// is not modified.
-func (v *Value[T]) Update(f func(*T)) {
+// The argument to f is a copy of the current value.  After f returns, the
+// result is stored. If f panics, the stored value is not modified.
+func (v *Value[T]) Update(f func(T) T) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	cp := v.x // shallow copy, in case f fails during an update
-	f(&cp)
-	v.setLocked(cp)
+	v.setLocked(f(v.x))
 }
 
 func (v *Value[T]) setLocked(newValue T) {
@@ -134,14 +131,13 @@ func (lv *Link[T]) StoreCond(v T) bool {
 // Once UpdateCond has been called, whether successful or not, lv is invalid.
 // After UpdateCond succeeds, the Get method returns the updated value.
 //
-// The argument to f is a non-nil pointer to a copy of the current value.
-// After f returns, the updated copy is stored. If f panics, the linked value
-// is not modified.
-func (lv *Link[T]) UpdateCond(f func(*T)) bool {
+// The argument to f is a copy of the current value.  After f returns, the
+// result is stored. If f panics, the linked value is not modified.
+func (lv *Link[T]) UpdateCond(f func(T) T) bool {
 	lv.v.mu.Lock()
 	defer lv.v.mu.Unlock()
 	if lv.v.gen == lv.gen {
-		f(&lv.snap)
+		lv.snap = f(lv.snap)
 		lv.v.setLocked(lv.snap)
 		return true
 	}
